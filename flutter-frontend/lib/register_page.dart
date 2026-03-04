@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'profile_page.dart';
+import 'verify_otp_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -45,7 +45,10 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
     if (!_agreedToPrivacy) {
-      setState(() => _errorMessage = 'You must agree to the Privacy Policy to continue');
+      setState(
+        () =>
+            _errorMessage = 'You must agree to the Privacy Policy to continue',
+      );
       return;
     }
 
@@ -68,10 +71,20 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _errorMessage = error);
     } else {
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
+      final emailIdentifier = _emailController.text.trim();
+      final verifyIdentifier = emailIdentifier.isNotEmpty
+          ? emailIdentifier
+          : _studentIdController.text.trim();
+
+      Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const ProfilePage()),
-        (route) => route.isFirst,
+        MaterialPageRoute(
+          builder: (_) => VerifyOtpPage(
+            identifier: verifyIdentifier,
+            loginIdentifier: _studentIdController.text.trim(),
+            loginPassword: _passwordController.text,
+          ),
+        ),
       );
     }
   }
@@ -122,7 +135,11 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 4),
                   const Text(
                     'Join the LNU Marketplace',
-                    style: TextStyle(color: kGold, fontSize: 12, letterSpacing: 1),
+                    style: TextStyle(
+                      color: kGold,
+                      fontSize: 12,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ],
               ),
@@ -194,7 +211,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       }
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       decoration: BoxDecoration(
                         color: kWhite,
                         borderRadius: BorderRadius.circular(12),
@@ -208,7 +228,11 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.cake_outlined, color: kNavy, size: 20),
+                          const Icon(
+                            Icons.cake_outlined,
+                            color: kNavy,
+                            size: 20,
+                          ),
                           const SizedBox(width: 12),
                           Text(
                             _selectedBirthdate == null
@@ -222,8 +246,11 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                           const Spacer(),
-                          Icon(Icons.calendar_today_outlined,
-                              color: Colors.grey[400], size: 16),
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            color: Colors.grey[400],
+                            size: 16,
+                          ),
                         ],
                       ),
                     ),
@@ -234,7 +261,10 @@ class _RegisterPageState extends State<RegisterPage> {
                   _buildLabel('Gender'),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: kWhite,
                       borderRadius: BorderRadius.circular(12),
@@ -252,27 +282,45 @@ class _RegisterPageState extends State<RegisterPage> {
                         isExpanded: true,
                         hint: Row(
                           children: [
-                            const Icon(Icons.wc_outlined, color: kNavy, size: 20),
+                            const Icon(
+                              Icons.wc_outlined,
+                              color: kNavy,
+                              size: 20,
+                            ),
                             const SizedBox(width: 12),
-                            Text('Select gender',
-                                style: TextStyle(
-                                    color: Colors.grey[400], fontSize: 13)),
+                            Text(
+                              'Select gender',
+                              style: TextStyle(
+                                color: Colors.grey[400],
+                                fontSize: 13,
+                              ),
+                            ),
                           ],
                         ),
-                        icon: Icon(Icons.keyboard_arrow_down,
-                            color: Colors.grey[400]),
-                        items: ['Male', 'Female', 'Other']
-                            .map((gender) {
+                        icon: Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Colors.grey[400],
+                        ),
+                        items: ['Male', 'Female', 'Prefer not to say'].map((
+                          gender,
+                        ) {
                           return DropdownMenuItem(
                             value: gender,
                             child: Row(
                               children: [
-                                const Icon(Icons.wc_outlined,
-                                    color: kNavy, size: 20),
+                                const Icon(
+                                  Icons.wc_outlined,
+                                  color: kNavy,
+                                  size: 20,
+                                ),
                                 const SizedBox(width: 12),
-                                Text(gender,
-                                    style: const TextStyle(
-                                        color: kNavy, fontSize: 13)),
+                                Text(
+                                  gender,
+                                  style: const TextStyle(
+                                    color: kNavy,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ],
                             ),
                           );
@@ -352,24 +400,25 @@ class _RegisterPageState extends State<RegisterPage> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          onChanged: (value) => setState(
-                              () => _agreedToPrivacy = value ?? false),
+                          onChanged: (value) =>
+                              setState(() => _agreedToPrivacy = value ?? false),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: GestureDetector(
                           onTap: () => setState(
-                              () => _agreedToPrivacy = !_agreedToPrivacy),
+                            () => _agreedToPrivacy = !_agreedToPrivacy,
+                          ),
                           child: RichText(
                             text: TextSpan(
                               style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 12,
-                                  height: 1.5),
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                                height: 1.5,
+                              ),
                               children: const [
-                                TextSpan(
-                                    text: 'I have read and agree to the '),
+                                TextSpan(text: 'I have read and agree to the '),
                                 TextSpan(
                                   text: 'Privacy Policy',
                                   style: TextStyle(
@@ -401,7 +450,9 @@ class _RegisterPageState extends State<RegisterPage> {
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
@@ -409,14 +460,19 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline,
-                              color: Colors.red[400], size: 16),
+                          Icon(
+                            Icons.error_outline,
+                            color: Colors.red[400],
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
                               style: TextStyle(
-                                  color: Colors.red[600], fontSize: 12),
+                                color: Colors.red[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ],
@@ -445,12 +501,16 @@ class _RegisterPageState extends State<RegisterPage> {
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
-                                  color: kNavy, strokeWidth: 2.5),
+                                color: kNavy,
+                                strokeWidth: 2.5,
+                              ),
                             )
                           : const Text(
                               'Create Account',
                               style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w700),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                     ),
                   ),

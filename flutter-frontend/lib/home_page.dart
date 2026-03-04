@@ -353,7 +353,7 @@ class _HomePageState extends State<HomePage> {
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: _featuredItems.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, index) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   return _FeaturedCard(item: _featuredItems[index]);
                 },

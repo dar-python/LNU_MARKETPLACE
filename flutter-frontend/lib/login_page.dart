@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'register_page.dart';
 import 'profile_page.dart';
+import 'verify_otp_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -17,7 +18,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _usernameController = TextEditingController();
+  final _studentIdController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -29,14 +30,39 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = null;
     });
 
-    final error = await AuthService().login(
-      username: _usernameController.text.trim(),
+    final authService = AuthService();
+    final error = await authService.login(
+      studentId: _studentIdController.text.trim(),
       password: _passwordController.text,
     );
 
     setState(() => _isLoading = false);
 
     if (error != null) {
+      if (authService.lastAuthErrorCode == 'EMAIL_NOT_VERIFIED') {
+        final backendIdentifier = authService.lastAuthErrorIdentifier;
+        final verifyIdentifier =
+            backendIdentifier != null && backendIdentifier.trim().isNotEmpty
+            ? backendIdentifier.trim()
+            : _studentIdController.text.trim();
+
+        if (!mounted) {
+          return;
+        }
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VerifyOtpPage(
+              identifier: verifyIdentifier,
+              loginIdentifier: _studentIdController.text.trim(),
+              loginPassword: _passwordController.text,
+            ),
+          ),
+        );
+        return;
+      }
+
       setState(() => _errorMessage = error);
     } else {
       if (!mounted) return;
@@ -126,13 +152,13 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 28),
 
-                  // Username
-                  _buildLabel('Username'),
+                  // Student ID
+                  _buildLabel('Student ID'),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    controller: _usernameController,
-                    hint: 'Enter your username',
-                    icon: Icons.account_circle_outlined,
+                    controller: _studentIdController,
+                    hint: 'Enter your Student ID (e.g. 2021-XXXXX)',
+                    icon: Icons.badge_outlined,
                     keyboardType: TextInputType.text,
                   ),
                   const SizedBox(height: 16),
@@ -147,11 +173,14 @@ class _LoginPageState extends State<LoginPage> {
                     obscure: _obscurePassword,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: Colors.grey[400],
                         size: 20,
                       ),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
 
@@ -159,7 +188,10 @@ class _LoginPageState extends State<LoginPage> {
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
@@ -167,12 +199,19 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: Colors.red[400], size: 16),
+                          Icon(
+                            Icons.error_outline,
+                            color: Colors.red[400],
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red[600], fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.red[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ],
@@ -200,11 +239,17 @@ class _LoginPageState extends State<LoginPage> {
                           ? const SizedBox(
                               width: 22,
                               height: 22,
-                              child: CircularProgressIndicator(color: kWhite, strokeWidth: 2.5),
+                              child: CircularProgressIndicator(
+                                color: kWhite,
+                                strokeWidth: 2.5,
+                              ),
                             )
                           : const Text(
                               'Sign In',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                     ),
                   ),
@@ -222,7 +267,9 @@ class _LoginPageState extends State<LoginPage> {
                       GestureDetector(
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const RegisterPage()),
+                          MaterialPageRoute(
+                            builder: (_) => const RegisterPage(),
+                          ),
                         ),
                         child: const Text(
                           'Register',
@@ -245,10 +292,7 @@ class _LoginPageState extends State<LoginPage> {
                       onTap: () => Navigator.pop(context),
                       child: Text(
                         '← Back to Home',
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
                       ),
                     ),
                   ),

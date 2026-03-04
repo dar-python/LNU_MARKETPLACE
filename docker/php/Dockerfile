@@ -17,4 +17,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www
 
+COPY docker/php/entrypoint.sh /usr/local/bin/laravel-entrypoint
+RUN chmod +x /usr/local/bin/laravel-entrypoint
+
+ENTRYPOINT ["laravel-entrypoint"]
+
 EXPOSE 9000
+
+CMD ["php-fpm"]
