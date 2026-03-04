@@ -182,7 +182,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _studentIdController,
-                    hint: 'Enter your Student ID (e.g. 2021-XXXXX)',
+                    hint: 'Enter Student ID',
                     icon: Icons.badge_outlined,
                     keyboardType: TextInputType.text,
                   ),
@@ -355,7 +355,7 @@ class _LoginPageState extends State<LoginPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

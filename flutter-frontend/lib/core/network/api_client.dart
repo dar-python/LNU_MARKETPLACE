@@ -77,32 +77,26 @@ class ApiClient {
         case DioExceptionType.sendTimeout:
         case DioExceptionType.receiveTimeout:
           mappedMessage = 'Request timed out. Please try again.';
-          break;
         case DioExceptionType.connectionError:
           if (error.error is SocketException) {
             mappedMessage =
-                'Cannot reach the server. Check API_BASE_URL and network access.';
+                'Cannot reach the server at ${AppConfig.baseUrl}. Check API_BASE_URL and network access.';
           } else {
             mappedMessage =
-                'Connection failed. Check API_BASE_URL and network access.';
+                'Connection failed for ${AppConfig.baseUrl}. Check API_BASE_URL and network access.';
           }
-          break;
         case DioExceptionType.badCertificate:
           mappedMessage = 'TLS certificate validation failed.';
-          break;
         case DioExceptionType.cancel:
           mappedMessage = 'Request canceled.';
-          break;
         case DioExceptionType.badResponse:
           mappedMessage = _extractBackendMessage(error.response);
-          break;
         case DioExceptionType.unknown:
           if (error.error is SocketException) {
             mappedMessage = 'Network error. Please check your connection.';
           } else {
             mappedMessage = error.message ?? 'Unexpected network error.';
           }
-          break;
       }
 
       _logMappedError(

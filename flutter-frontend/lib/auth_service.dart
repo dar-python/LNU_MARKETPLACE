@@ -90,9 +90,6 @@ class AuthService {
     if (name.trim().isEmpty) {
       return 'Name is required.';
     }
-    if (username.trim().isEmpty) {
-      return 'Username is required.';
-    }
     if (studentId.trim().isEmpty) {
       return 'Student ID is required.';
     }

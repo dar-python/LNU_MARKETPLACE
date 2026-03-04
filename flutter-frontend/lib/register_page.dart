@@ -32,23 +32,44 @@ class _RegisterPageState extends State<RegisterPage> {
   String? _selectedGender;
 
   Future<void> _register() async {
-    if (_passwordController.text != _confirmPasswordController.text) {
-      setState(() => _errorMessage = 'Passwords do not match');
+    final studentId = _studentIdController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
+    final password = _passwordController.text;
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty) {
+      setState(() => _errorMessage = 'Full name is required');
       return;
     }
-    if (_selectedBirthdate == null) {
-      setState(() => _errorMessage = 'Please select your birthdate');
-      return;
-    }
-    if (_selectedGender == null) {
-      setState(() => _errorMessage = 'Please select your gender');
-      return;
-    }
-    if (!_agreedToPrivacy) {
+    if (!RegExp(r'^(210|220|230|240|250|260|270|280)\d{4}$').hasMatch(studentId)) {
       setState(
         () =>
-            _errorMessage = 'You must agree to the Privacy Policy to continue',
+            _errorMessage =
+                'Student ID must be 7 digits with allowed prefix (210-280).',
       );
+      return;
+    }
+    if (email.isNotEmpty) {
+      if (!email.endsWith('@lnu.edu.ph')) {
+        setState(() => _errorMessage = 'Email domain must be lnu.edu.ph');
+        return;
+      }
+      if (email.split('@').first != studentId) {
+        setState(() => _errorMessage = 'Email must match Student ID.');
+        return;
+      }
+    }
+    if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$')
+        .hasMatch(password)) {
+      setState(
+        () =>
+            _errorMessage =
+                'Password must be at least 8 chars with upper/lower/number/symbol.',
+      );
+      return;
+    }
+    if (_passwordController.text != _confirmPasswordController.text) {
+      setState(() => _errorMessage = 'Passwords do not match');
       return;
     }
 
@@ -58,11 +79,11 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     final error = await AuthService().register(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
+      name: name,
+      email: email,
       username: _usernameController.text.trim(),
-      password: _passwordController.text,
-      studentId: _studentIdController.text.trim(),
+      password: password,
+      studentId: studentId,
     );
 
     setState(() => _isLoading = false);
@@ -74,15 +95,15 @@ class _RegisterPageState extends State<RegisterPage> {
       final emailIdentifier = _emailController.text.trim();
       final verifyIdentifier = emailIdentifier.isNotEmpty
           ? emailIdentifier
-          : _studentIdController.text.trim();
+          : studentId;
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => VerifyOtpPage(
             identifier: verifyIdentifier,
-            loginIdentifier: _studentIdController.text.trim(),
-            loginPassword: _passwordController.text,
+            loginIdentifier: studentId,
+            loginPassword: password,
           ),
         ),
       );
@@ -178,8 +199,9 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _studentIdController,
-                    hint: 'e.g. 2300***',
+                    hint: 'e.g. 2301234',
                     icon: Icons.badge_outlined,
+                    keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 14),
 
@@ -220,7 +242,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -270,7 +292,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -348,7 +370,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _passwordController,
-                    hint: 'At least 6 characters',
+                    hint: 'Min 8 chars + upper/lower/number/symbol',
                     icon: Icons.lock_outline,
                     obscure: _obscurePassword,
                     suffixIcon: IconButton(
@@ -574,7 +596,7 @@ class _RegisterPageState extends State<RegisterPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

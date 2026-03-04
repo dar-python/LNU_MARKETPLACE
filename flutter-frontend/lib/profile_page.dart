@@ -4,9 +4,9 @@ import 'auth_service.dart';
 import 'backend_status_page.dart';
 import 'login_page.dart';
 
-const kNavy = Color(0xFF0D1B6E);
-const kDarkNavy = Color(0xFF080F45);
-const kGold = Color(0xFFF5C518);
+const kNavy = Color(0xFF000080);
+const kDarkNavy = Color(0xFF00263E);
+const kGold = Color(0xFFFFD700);
 const kWhite = Color(0xFFFFFFFF);
 
 class ProfilePage extends StatefulWidget {
@@ -142,7 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: kWhite.withOpacity(0.15),
+                        color: kWhite.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -191,7 +191,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: <BoxShadow>[
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
@@ -215,9 +215,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        pingError != null
-                            ? pingError
-                            : 'Status: ${statusCode ?? 'Not checked'} | Body: ${pingBody ?? {}}',
+                        pingError ??
+                            'Status: ${statusCode ?? 'Not checked'} | Body: ${pingBody ?? {}}',
                         style: TextStyle(
                           color: pingError != null
                               ? Colors.red[700]
@@ -391,7 +390,7 @@ class _StatCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -442,7 +441,7 @@ class _MenuItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
