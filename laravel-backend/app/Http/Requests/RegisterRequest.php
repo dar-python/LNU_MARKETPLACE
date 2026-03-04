@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\StudentIdPrefix;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -21,6 +20,7 @@ class RegisterRequest extends FormRequest
     public function rules(): array
     {
         $passwordRule = Password::min(8)->mixedCase()->numbers()->symbols();
+        $studentIdRegex = $this->studentIdRegex();
 
         if ((bool) config('lnu.password_uncompromised', false)) {
             $passwordRule = $passwordRule->uncompromised();
@@ -31,17 +31,8 @@ class RegisterRequest extends FormRequest
             'student_id' => [
                 'required',
                 'string',
-                'regex:/^\d{6,12}$/',
+                "regex:{$studentIdRegex}",
                 Rule::unique('users', 'student_id'),
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    $studentId = (string) $value;
-                    $prefixLength = (int) config('lnu.student_id_prefix_length', 2);
-                    $prefix = substr($studentId, 0, $prefixLength);
-
-                    if ($prefix === '' || ! $this->prefixExists($prefix)) {
-                        $fail('The selected student ID prefix is not allowed.');
-                    }
-                },
             ],
             'email' => [
                 'nullable',
@@ -62,6 +53,15 @@ class RegisterRequest extends FormRequest
 
                     if ($normalizedDomains === [] || ! in_array($domain, $normalizedDomains, true)) {
                         $fail('The email domain is not allowed.');
+                    }
+
+                    if ((bool) config('lnu.enforce_email_student_id_match', true)) {
+                        $studentId = (string) $this->input('student_id');
+                        $emailLocalPart = Str::before($value, '@');
+
+                        if ($emailLocalPart === '' || $emailLocalPart !== $studentId) {
+                            $fail('Email must match Student ID.');
+                        }
                     }
                 },
             ],
@@ -93,11 +93,33 @@ class RegisterRequest extends FormRequest
         ];
     }
 
-    private function prefixExists(string $prefix): bool
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
     {
-        return StudentIdPrefix::query()
-            ->where('is_active', true)
-            ->where('prefix', $prefix)
-            ->exists();
+        return [
+            'student_id.regex' => 'Student ID must be exactly 7 digits and start with an allowed prefix (210, 220, 230, 240, 250, 260, 270, 280).',
+        ];
+    }
+
+    private function studentIdRegex(): string
+    {
+        $allowedPrefixes = config('lnu.allowed_student_id_prefixes', []);
+        $normalizedPrefixes = array_values(array_filter(array_map(
+            static fn ($prefix): string => trim((string) $prefix),
+            is_array($allowedPrefixes) ? $allowedPrefixes : []
+        )));
+
+        if ($normalizedPrefixes === []) {
+            $normalizedPrefixes = ['210', '220', '230', '240', '250', '260', '270', '280'];
+        }
+
+        $alternation = implode('|', array_map(
+            static fn (string $prefix): string => preg_quote($prefix, '/'),
+            $normalizedPrefixes
+        ));
+
+        return "/^({$alternation})\\d{4}$/";
     }
 }

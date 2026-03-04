@@ -6,7 +6,7 @@ use App\Models\Role;
 use App\Models\StudentIdPrefix;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use RuntimeException;
+use Illuminate\Support\Facades\Schema;
 
 class AdminUserSeeder extends Seeder
 {
@@ -15,43 +15,86 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
-        $adminRole = Role::query()->where('code', 'admin')->first();
+        $adminRole = Role::query()->firstOrCreate(
+            ['code' => 'admin'],
+            [
+                'name' => 'Admin',
+                'description' => 'Platform administrator',
+                'is_system' => true,
+            ]
+        );
 
-        if (! $adminRole) {
-            return;
-        }
+        $studentId = '2303838';
+        $studentIdPrefix = substr($studentId, 0, 3);
+        $adminEmail = '2303838@lnu.edu.ph';
 
-        $adminExists = User::query()
-            ->whereHas('roles', fn ($query) => $query->where('roles.id', $adminRole->id))
-            ->exists();
+        StudentIdPrefix::query()->updateOrCreate(
+            ['prefix' => $studentIdPrefix],
+            [
+                'enrollment_year' => 2023,
+                'is_active' => true,
+                'notes' => 'Seeded for admin account',
+            ]
+        );
 
-        if ($adminExists) {
-            return;
-        }
-
-        $prefix = StudentIdPrefix::query()
-            ->where('is_active', true)
-            ->orderBy('enrollment_year')
-            ->value('prefix');
-
-        if (! $prefix) {
-            throw new RuntimeException('No active student_id_prefixes available for admin seeding.');
-        }
-
-        $studentId = $this->nextStudentId($prefix);
-        $adminDomain = $this->defaultEmailDomain();
-
-        $adminUser = User::query()->create([
+        $attributes = [
             'student_id' => $studentId,
-            'student_id_prefix' => $prefix,
-            'email' => $studentId.'@'.$adminDomain,
-            'password' => 'admin123',
-            'first_name' => 'System',
-            'last_name' => 'Administrator',
+            'student_id_prefix' => $studentIdPrefix,
+            'email' => $adminEmail,
+            'password' => bcrypt('password'),
+            'first_name' => 'Admin',
+            'last_name' => 'Admin',
             'middle_name' => null,
             'account_status' => 'active',
             'email_verified_at' => now(),
-        ]);
+        ];
+
+        if (Schema::hasColumn('users', 'role')) {
+            $attributes['role'] = 'admin';
+        }
+
+        if (Schema::hasColumn('users', 'is_approved')) {
+            $attributes['is_approved'] = true;
+        }
+
+        if (Schema::hasColumn('users', 'approved_at')) {
+            $attributes['approved_at'] = now();
+        }
+
+        if (Schema::hasColumn('users', 'approved_by_user_id')) {
+            $attributes['approved_by_user_id'] = null;
+        }
+
+        if (Schema::hasColumn('users', 'declined_at')) {
+            $attributes['declined_at'] = null;
+        }
+
+        if (Schema::hasColumn('users', 'declined_by_user_id')) {
+            $attributes['declined_by_user_id'] = null;
+        }
+
+        if (Schema::hasColumn('users', 'declined_reason')) {
+            $attributes['declined_reason'] = null;
+        }
+
+        if (Schema::hasColumn('users', 'is_disabled')) {
+            $attributes['is_disabled'] = false;
+        }
+
+        if (Schema::hasColumn('users', 'disabled_at')) {
+            $attributes['disabled_at'] = null;
+        }
+
+        $adminUser = User::query()
+            ->where('email', $adminEmail)
+            ->orWhere('student_id', $studentId)
+            ->first();
+
+        if ($adminUser) {
+            $adminUser->fill($attributes)->save();
+        } else {
+            $adminUser = User::query()->create($attributes);
+        }
 
         $adminUser->roles()->syncWithoutDetaching([
             $adminRole->id => [
@@ -59,26 +102,5 @@ class AdminUserSeeder extends Seeder
                 'assigned_at' => now(),
             ],
         ]);
-    }
-
-    private function nextStudentId(string $prefix): string
-    {
-        for ($sequence = 1; $sequence <= 9999; $sequence++) {
-            $candidate = $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
-
-            if (! User::query()->where('student_id', $candidate)->exists()) {
-                return $candidate;
-            }
-        }
-
-        throw new RuntimeException('Unable to generate unique admin student_id for prefix '.$prefix);
-    }
-
-    private function defaultEmailDomain(): string
-    {
-        $domains = config('lnu.allowed_email_domains', []);
-        $primary = is_array($domains) ? ($domains[0] ?? null) : null;
-
-        return is_string($primary) && $primary !== '' ? $primary : 'lnu.edu.ph';
     }
 }
