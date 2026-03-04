@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -33,24 +34,26 @@ class ApiClient {
                 options.headers['Authorization'] = 'Bearer $token';
               }
 
-              if (kDebugMode) {
-                debugPrint('HTTP ${options.method} ${options.uri}');
+              if (_shouldLog) {
+                debugPrint(
+                  'HTTP --> ${options.method} ${options.uri} auth=${token != null && token.isNotEmpty ? 'attached' : 'none'}',
+                );
               }
               handler.next(options);
             },
         onResponse:
             (Response<dynamic> response, ResponseInterceptorHandler handler) {
-              if (kDebugMode) {
+              if (_shouldLog) {
                 debugPrint(
-                  'HTTP ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.path}',
+                  'HTTP <-- ${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.uri} body=${_bodySnippet(response.data)}',
                 );
               }
               handler.next(response);
             },
         onError: (DioException error, ErrorInterceptorHandler handler) {
-          if (kDebugMode) {
+          if (_shouldLog) {
             debugPrint(
-              'HTTP ERROR ${error.response?.statusCode ?? ''} ${error.requestOptions.method} ${error.requestOptions.path} ${error.message}',
+              'HTTP xx ${error.response?.statusCode ?? 'NO_STATUS'} ${error.requestOptions.method} ${error.requestOptions.uri} type=${error.type.name} message=${error.message} body=${_bodySnippet(error.response?.data)}',
             );
           }
           handler.next(error);
@@ -60,33 +63,55 @@ class ApiClient {
   }
 
   final Dio _dio;
+  bool get _shouldLog => AppConfig.enableNetworkDebugLogs;
 
   Dio get dio => _dio;
 
   String mapError(Object error) {
     if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      late final String mappedMessage;
+
       switch (error.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.sendTimeout:
         case DioExceptionType.receiveTimeout:
-          return 'Request timed out. Please try again.';
+          mappedMessage = 'Request timed out. Please try again.';
+          break;
         case DioExceptionType.connectionError:
           if (error.error is SocketException) {
-            return 'Cannot reach the server. Check API_BASE_URL and network access.';
+            mappedMessage =
+                'Cannot reach the server. Check API_BASE_URL and network access.';
+          } else {
+            mappedMessage =
+                'Connection failed. Check API_BASE_URL and network access.';
           }
-          return 'Connection failed. Check API_BASE_URL and network access.';
+          break;
         case DioExceptionType.badCertificate:
-          return 'TLS certificate validation failed.';
+          mappedMessage = 'TLS certificate validation failed.';
+          break;
         case DioExceptionType.cancel:
-          return 'Request canceled.';
+          mappedMessage = 'Request canceled.';
+          break;
         case DioExceptionType.badResponse:
-          return _extractBackendMessage(error.response);
+          mappedMessage = _extractBackendMessage(error.response);
+          break;
         case DioExceptionType.unknown:
           if (error.error is SocketException) {
-            return 'Network error. Please check your connection.';
+            mappedMessage = 'Network error. Please check your connection.';
+          } else {
+            mappedMessage = error.message ?? 'Unexpected network error.';
           }
-          return error.message ?? 'Unexpected network error.';
+          break;
       }
+
+      _logMappedError(
+        statusCode: statusCode,
+        mappedMessage: mappedMessage,
+        error: error,
+      );
+
+      return mappedMessage;
     }
 
     return 'Unexpected error.';
@@ -149,6 +174,61 @@ class ApiClient {
     }
 
     return 'Request failed (${statusCode == 0 ? 'no status' : statusCode}).';
+  }
+
+  void _logMappedError({
+    required int? statusCode,
+    required String mappedMessage,
+    required DioException error,
+  }) {
+    if (!_shouldLog) {
+      return;
+    }
+
+    final shouldLogStatus =
+        statusCode == 401 ||
+        statusCode == 403 ||
+        statusCode == 422 ||
+        (statusCode != null && statusCode >= 500);
+
+    if (!shouldLogStatus) {
+      return;
+    }
+
+    debugPrint(
+      'HTTP map status=${statusCode ?? 'NO_STATUS'} message="$mappedMessage" method=${error.requestOptions.method} path=${error.requestOptions.path}',
+    );
+  }
+
+  String _bodySnippet(dynamic body) {
+    final serializedBody = _serializeBody(
+      body,
+    ).replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (serializedBody.isEmpty) {
+      return '<empty>';
+    }
+
+    if (serializedBody.length <= AppConfig.networkDebugBodySnippetLimit) {
+      return serializedBody;
+    }
+
+    return '${serializedBody.substring(0, AppConfig.networkDebugBodySnippetLimit)}...';
+  }
+
+  String _serializeBody(dynamic body) {
+    if (body == null) {
+      return '';
+    }
+
+    if (body is String) {
+      return body;
+    }
+
+    try {
+      return jsonEncode(body);
+    } catch (_) {
+      return body.toString();
+    }
   }
 
   String? _extractErrorMeta(Object error, String key) {

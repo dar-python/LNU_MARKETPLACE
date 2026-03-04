@@ -11,7 +11,20 @@ const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({
+    super.key,
+    this.loginHandler,
+    this.authErrorCodeResolver,
+    this.authErrorIdentifierResolver,
+  });
+
+  final Future<String?> Function({
+    required String studentId,
+    required String password,
+  })?
+  loginHandler;
+  final String? Function()? authErrorCodeResolver;
+  final String? Function()? authErrorIdentifierResolver;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -31,16 +44,28 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final authService = AuthService();
-    final error = await authService.login(
-      studentId: _studentIdController.text.trim(),
-      password: _passwordController.text,
-    );
+    final loginHandler = widget.loginHandler;
+    final error = await (loginHandler != null
+        ? loginHandler(
+            studentId: _studentIdController.text.trim(),
+            password: _passwordController.text,
+          )
+        : authService.login(
+            studentId: _studentIdController.text.trim(),
+            password: _passwordController.text,
+          ));
 
     setState(() => _isLoading = false);
 
     if (error != null) {
-      if (authService.lastAuthErrorCode == 'EMAIL_NOT_VERIFIED') {
-        final backendIdentifier = authService.lastAuthErrorIdentifier;
+      final authErrorCode =
+          widget.authErrorCodeResolver?.call() ?? authService.lastAuthErrorCode;
+      final authErrorIdentifier =
+          widget.authErrorIdentifierResolver?.call() ??
+          authService.lastAuthErrorIdentifier;
+
+      if (authErrorCode == 'EMAIL_NOT_VERIFIED') {
+        final backendIdentifier = authErrorIdentifier;
         final verifyIdentifier =
             backendIdentifier != null && backendIdentifier.trim().isNotEmpty
             ? backendIdentifier.trim()

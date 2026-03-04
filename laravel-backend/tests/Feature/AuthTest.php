@@ -27,6 +27,7 @@ class AuthTest extends TestCase
         config()->set('lnu.enforce_email_student_id_match', true);
         config()->set('lnu.password_uncompromised', false);
         config()->set('lnu.email_otp_expires_minutes', 10);
+        config()->set('sanctum.stateful', []);
 
         StudentIdPrefix::query()->updateOrCreate(
             ['prefix' => '230'],
@@ -108,6 +109,67 @@ class AuthTest extends TestCase
             ]);
     }
 
+    public function test_register_validation_errors_for_missing_required_fields(): void
+    {
+        $response = $this->postJson('/api/v1/auth/register', []);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['name', 'student_id', 'password'],
+                'trace_id',
+            ]);
+    }
+
+    public function test_register_student_id_validation_matrix(): void
+    {
+        config()->set('lnu.allowed_student_id_prefixes', ['230', '240']);
+        StudentIdPrefix::query()->updateOrCreate(
+            ['prefix' => '240'],
+            [
+                'enrollment_year' => 2024,
+                'is_active' => true,
+                'notes' => 'Test prefix',
+            ]
+        );
+
+        $validStudentIds = ['2302201', '2409999'];
+        $invalidStudentIds = ['230123', '23012345', 'ABC1234', '2501234', '23A1234'];
+
+        foreach ($validStudentIds as $index => $studentId) {
+            $response = $this->postJson('/api/v1/auth/register', [
+                'name' => 'Valid Student '.$index,
+                'student_id' => $studentId,
+                'email' => $studentId.'@lnu.edu.ph',
+                'password' => 'Safe!Pass123',
+                'password_confirmation' => 'Safe!Pass123',
+            ]);
+
+            $response
+                ->assertCreated()
+                ->assertJsonPath('success', true)
+                ->assertJsonPath('data.user.student_id', $studentId);
+        }
+
+        foreach ($invalidStudentIds as $index => $studentId) {
+            $response = $this->postJson('/api/v1/auth/register', [
+                'name' => 'Invalid Student '.$index,
+                'student_id' => $studentId,
+                'email' => 'invalid'.$index.'@lnu.edu.ph',
+                'password' => 'Safe!Pass123',
+                'password_confirmation' => 'Safe!Pass123',
+            ]);
+
+            $response
+                ->assertStatus(422)
+                ->assertJsonPath('success', false)
+                ->assertJsonPath('message', 'Validation failed.')
+                ->assertJsonStructure(['errors' => ['student_id'], 'trace_id']);
+        }
+    }
+
     public function test_login_blocks_unverified_email_with_code(): void
     {
         $user = $this->createUser('2301236', 'pending_verification', '2301236@lnu.edu.ph', false);
@@ -180,6 +242,14 @@ class AuthTest extends TestCase
 
         $user = User::query()->where('student_id', '2301240')->firstOrFail();
         $this->assertNull($user->email_verified_at);
+        $this->assertDatabaseHas('activity_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'auth.registered',
+        ]);
+        $this->assertDatabaseHas('activity_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'auth.email_otp_sent',
+        ]);
 
         $verification = StudentVerification::query()
             ->where('user_id', $user->id)
@@ -208,6 +278,10 @@ class AuthTest extends TestCase
             ->assertStatus(403)
             ->assertJsonPath('message', 'Email not verified yet.')
             ->assertJsonPath('errors.code', 'EMAIL_NOT_VERIFIED');
+        $this->assertDatabaseHas('activity_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'auth.login_blocked',
+        ]);
 
         $this->postJson('/api/v1/auth/email/otp/verify', [
             'identifier' => '2301240@lnu.edu.ph',
@@ -216,6 +290,10 @@ class AuthTest extends TestCase
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('message', 'Email verified.');
+        $this->assertDatabaseHas('activity_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'auth.email_otp_verified',
+        ]);
 
         $user->refresh();
         $verification->refresh();
@@ -236,6 +314,10 @@ class AuthTest extends TestCase
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('message', 'Login successful.');
+        $this->assertDatabaseHas('activity_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'auth.login_success',
+        ]);
     }
 
     public function test_email_otp_resend_endpoint_is_throttled(): void
@@ -287,6 +369,23 @@ class AuthTest extends TestCase
             ]);
     }
 
+    public function test_login_with_wrong_password_returns_401_in_standard_error_envelope(): void
+    {
+        $user = $this->createUser('2301299', 'active', 'wrong-pass@lnu.edu.ph');
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'identifier' => $user->student_id,
+            'password' => 'Wrong!Pass123',
+        ]);
+
+        $response
+            ->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Invalid credentials.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+    }
+
     public function test_logout_revokes_current_token(): void
     {
         $user = $this->createUser('2301238', 'active');
@@ -302,6 +401,32 @@ class AuthTest extends TestCase
             ->assertJsonPath('data', null);
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->assertDatabaseHas('activity_logs', [
+            'actor_user_id' => $user->id,
+            'action_type' => 'auth.logout',
+        ]);
+    }
+
+    public function test_logout_invalidates_token_and_blocks_me_endpoint_afterward(): void
+    {
+        $user = $this->createUser('2301210', 'active');
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/auth/logout')
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->flushSession();
+        $this->app['auth']->forgetGuards();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/v1/auth/me')
+            ->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Unauthenticated.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
     }
 
     public function test_me_requires_auth_and_returns_user_profile(): void

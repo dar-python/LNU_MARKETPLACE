@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
   static const String _baseUrlFromEnv = String.fromEnvironment(
     'API_BASE_URL',
@@ -14,4 +16,15 @@ class AppConfig {
     }
     return trimmed;
   }
+
+  static const bool _enableNetworkDebugLogsFromEnv = bool.fromEnvironment(
+    'ENABLE_NETWORK_DEBUG_LOGS',
+    defaultValue: false,
+  );
+
+  static bool get enableNetworkDebugLogs {
+    return kDebugMode && _enableNetworkDebugLogsFromEnv;
+  }
+
+  static const int networkDebugBodySnippetLimit = 400;
 }
