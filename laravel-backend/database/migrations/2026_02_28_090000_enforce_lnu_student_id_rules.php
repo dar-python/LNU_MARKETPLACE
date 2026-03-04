@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    private const ALLOWED_PREFIXES = ['210', '220', '230', '240', '250', '260'];
+    private const ALLOWED_PREFIXES = ['210', '220', '230', '240', '250', '260', '270', '280'];
 
     /**
      * Run the migrations.
@@ -36,7 +36,7 @@ return new class extends Migration
         }
 
         $hasUnconvertiblePrefixes = DB::table('student_id_prefixes')
-            ->whereRaw("prefix NOT REGEXP '^(21|22|23|24|25|26)$'")
+            ->whereRaw("prefix NOT REGEXP '^(21|22|23|24|25|26|27|28)$'")
             ->whereRaw("prefix NOT REGEXP '^({$allowedAlternation})$'")
             ->exists();
 

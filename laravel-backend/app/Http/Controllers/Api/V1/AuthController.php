@@ -27,7 +27,7 @@ class AuthController extends Controller
     {
         $validated = $request->validated();
         $studentId = (string) $validated['student_id'];
-        $prefixLength = (int) config('lnu.student_id_prefix_length', 2);
+        $prefixLength = (int) config('lnu.student_id_prefix_length', 3);
         $studentIdPrefix = $this->resolveStudentPrefix($studentId, $prefixLength);
         $email = isset($validated['email']) && is_string($validated['email']) && $validated['email'] !== ''
             ? $validated['email']
@@ -71,9 +71,10 @@ class AuthController extends Controller
         }
 
         return ApiResponse::success(
-            'Registration submitted. Await admin approval.',
+            'Registration successful. Please verify your email using the OTP.',
             [
                 'user' => $this->serializeUser($user, false),
+                'requires_email_verification' => $email !== null,
             ],
             201
         );
@@ -98,16 +99,17 @@ class AuthController extends Controller
             return ApiResponse::error('Invalid credentials.', null, 401);
         }
 
-        if ($user->email !== null && $user->email_verified_at === null) {
-            return ApiResponse::error('Email not verified yet.', null, 403);
-        }
-
-        if ($user->isPendingApproval()) {
-            return ApiResponse::error('Account not approved yet.', null, 403);
-        }
-
         if ($user->isBlockedFromLogin()) {
-            return ApiResponse::error('Account suspended.', null, 403);
+            return ApiResponse::error('Account suspended.', [
+                'code' => 'ACCOUNT_SUSPENDED',
+            ], 403);
+        }
+
+        if ($user->email !== null && $user->email_verified_at === null) {
+            return ApiResponse::error('Email not verified yet.', [
+                'code' => 'EMAIL_NOT_VERIFIED',
+                'identifier' => $user->email,
+            ], 403);
         }
 
         $abilities = $user->roles
@@ -196,6 +198,7 @@ class AuthController extends Controller
 
             $user->forceFill([
                 'email_verified_at' => now(),
+                ...$this->activeStatusAttributes(),
             ])->save();
         });
 
@@ -338,12 +341,26 @@ class AuthController extends Controller
             return null;
         }
 
-        $match = StudentIdPrefix::query()
-            ->where('is_active', true)
-            ->where('prefix', $prefix)
-            ->first(['prefix']);
+        $allowedPrefixes = config('lnu.allowed_student_id_prefixes', []);
+        $normalizedPrefixes = array_values(array_filter(array_map(
+            static fn ($value): string => trim((string) $value),
+            is_array($allowedPrefixes) ? $allowedPrefixes : []
+        )));
 
-        return $match?->prefix;
+        if ($normalizedPrefixes !== [] && ! in_array($prefix, $normalizedPrefixes, true)) {
+            return null;
+        }
+
+        StudentIdPrefix::query()->updateOrCreate(
+            ['prefix' => $prefix],
+            [
+                'enrollment_year' => 2000 + (int) substr($prefix, 0, 2),
+                'is_active' => true,
+                'notes' => 'Auto-synced from registration validation rules.',
+            ]
+        );
+
+        return $prefix;
     }
 
     private function hashOtp(string $otp): string
@@ -378,10 +395,22 @@ class AuthController extends Controller
     private function pendingStatusAttributes(): array
     {
         if (Schema::hasColumn('users', 'status')) {
-            return ['status' => 'pending'];
+            return ['status' => 'pending_verification'];
         }
 
         return ['account_status' => 'pending_verification'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function activeStatusAttributes(): array
+    {
+        if (Schema::hasColumn('users', 'status')) {
+            return ['status' => 'active'];
+        }
+
+        return ['account_status' => 'active'];
     }
 
     /**

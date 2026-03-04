@@ -27,12 +27,21 @@ class User extends Authenticatable
         'student_id_prefix',
         'email',
         'password',
+        'role',
         'first_name',
         'last_name',
         'middle_name',
         'profile_photo_path',
         'status',
         'account_status',
+        'is_approved',
+        'approved_at',
+        'approved_by_user_id',
+        'declined_at',
+        'declined_by_user_id',
+        'declined_reason',
+        'is_disabled',
+        'disabled_at',
         'email_verified_at',
         'suspended_until',
         'suspended_reason',
@@ -58,6 +67,13 @@ class User extends Authenticatable
     {
         return [
             'account_status' => 'string',
+            'is_approved' => 'boolean',
+            'approved_at' => 'datetime',
+            'approved_by_user_id' => 'integer',
+            'declined_at' => 'datetime',
+            'declined_by_user_id' => 'integer',
+            'is_disabled' => 'boolean',
+            'disabled_at' => 'datetime',
             'email_verified_at' => 'datetime',
             'suspended_until' => 'datetime',
             'last_login_at' => 'datetime',
@@ -69,6 +85,16 @@ class User extends Authenticatable
     public function studentIdPrefix(): BelongsTo
     {
         return $this->belongsTo(StudentIdPrefix::class, 'student_id_prefix', 'prefix');
+    }
+
+    public function approvedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    public function declinedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'declined_by_user_id');
     }
 
     public function roles(): BelongsToMany
