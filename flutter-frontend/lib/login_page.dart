@@ -17,7 +17,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _studentIdController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -30,7 +30,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final error = await AuthService().login(
-      studentId: _studentIdController.text.trim(),
+      username: _usernameController.text.trim(),
       password: _passwordController.text,
     );
 
@@ -126,13 +126,13 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 28),
 
-                  // Student ID
-                  _buildLabel('Student ID'),
+                  // Username
+                  _buildLabel('Username'),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    controller: _studentIdController,
-                    hint: 'Enter your Student ID (e.g. 2021-XXXXX)',
-                    icon: Icons.badge_outlined,
+                    controller: _usernameController,
+                    hint: 'Enter your username',
+                    icon: Icons.account_circle_outlined,
                     keyboardType: TextInputType.text,
                   ),
                   const SizedBox(height: 16),
@@ -286,7 +286,7 @@ class _LoginPageState extends State<LoginPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
