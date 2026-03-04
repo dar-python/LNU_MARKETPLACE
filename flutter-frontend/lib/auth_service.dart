@@ -7,6 +7,9 @@ class AuthService {
 
   Map<String, dynamic>? _currentUser;
 
+  // Stores all registered users: key = username (lowercase)
+  final Map<String, Map<String, dynamic>> _registeredUsers = {};
+
   bool get isLoggedIn => _currentUser != null;
   Map<String, dynamic>? get currentUser => _currentUser;
 
@@ -22,37 +25,64 @@ class AuthService {
 
     // Basic validation
     if (name.trim().isEmpty) return 'Name is required';
-    if (!email.contains('@')) return 'Enter Institutional Email';
-    if (username.trim().isEmpty) return 'Username is required'; 
+    if (email.isNotEmpty && !email.contains('@')) return 'Enter a valid Institutional Email';
+    if (username.trim().isEmpty) return 'Username is required';
     if (password.length < 6) return 'Password must be at least 6 characters';
     if (studentId.trim().isEmpty) return 'Student ID is required';
 
-    _currentUser = {
+    // Check if username already taken
+    if (_registeredUsers.containsKey(username.toLowerCase())) {
+      return 'Username already taken. Please choose another.';
+    }
+
+    // Save user to in-memory store
+    _registeredUsers[username.toLowerCase()] = {
       'name': name,
       'email': email,
+      'username': username,
+      'password': password,
       'studentId': studentId,
       'avatar': name[0].toUpperCase(),
     };
+
+    // Auto login after register
+    _currentUser = {
+      'name': name,
+      'email': email,
+      'username': username,
+      'studentId': studentId,
+      'avatar': name[0].toUpperCase(),
+    };
+
     return null; // null means success
   }
 
-  // Simulated login — replace with real API call
+  // Login using username + password only
   Future<String?> login({
-    required String studentId,
+    required String username,
     required String password,
   }) async {
     await Future.delayed(const Duration(seconds: 1)); // simulate network
 
-    if (studentId.trim().isEmpty) return 'Student ID is required';
+    if (username.trim().isEmpty) return 'Username is required';
     if (password.length < 6) return 'Password must be at least 6 characters';
 
-    // Simulate successful login
+    // Check if username exists
+    final user = _registeredUsers[username.toLowerCase()];
+    if (user == null) return 'Username not found. Please register first.';
+
+    // Check if password matches
+    if (user['password'] != password) return 'Incorrect password.';
+
+    // Successful login
     _currentUser = {
-      'name': studentId,
-      'email': '',
-      'studentId': studentId,
-      'avatar': studentId[0].toUpperCase(),
+      'name': user['name'],
+      'email': user['email'],
+      'username': user['username'],
+      'studentId': user['studentId'],
+      'avatar': user['avatar'],
     };
+
     return null; // null means success
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
+import 'browse_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -88,28 +89,34 @@ class _HomePageState extends State<HomePage> {
             child: const Icon(Icons.school, color: kNavy, size: 20),
           ),
           const SizedBox(width: 10),
-          Flexible(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'LNU Marketplace',
-                  style: TextStyle(
-                    color: kWhite,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    letterSpacing: 0.5,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'LNU Marketplace',
+                    style: const TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  'Leyte Normal University',
-                  style: TextStyle(
-                    color: kGold,
-                    fontSize: 10,
-                    letterSpacing: 1.2,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Leyte Normal University',
+                    style: const TextStyle(
+                      color: kGold,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -192,7 +199,7 @@ class _HomePageState extends State<HomePage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: kNavy.withOpacity(0.4),
+            color: kNavy.withValues(alpha: 0.4),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -210,7 +217,7 @@ class _HomePageState extends State<HomePage> {
               height: 140,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: kGold.withOpacity(0.08),
+                color: kGold.withValues(alpha: 0.08),
               ),
             ),
           ),
@@ -222,7 +229,7 @@ class _HomePageState extends State<HomePage> {
               height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: kGold.withOpacity(0.06),
+                color: kGold.withValues(alpha: 0.06),
               ),
             ),
           ),
@@ -283,7 +290,7 @@ class _HomePageState extends State<HomePage> {
             bottom: 16,
             child: Icon(
               Icons.store_mall_directory_rounded,
-              color: kGold.withOpacity(0.5),
+              color: kGold.withValues(alpha: 0.5),
               size: 80,
             ),
           ),
@@ -429,7 +436,9 @@ class _HomePageState extends State<HomePage> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _NavItem(icon: Icons.home_rounded, label: 'Home', isActive: _selectedIndex == 0, onTap: () => setState(() => _selectedIndex = 0)),
-            _NavItem(icon: Icons.explore_rounded, label: 'Browse', isActive: _selectedIndex == 1, onTap: () => setState(() => _selectedIndex = 1)),
+            _NavItem(icon: Icons.explore_rounded, label: 'Browse', isActive: _selectedIndex == 1, onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const BrowsePage()));
+            }),
             const SizedBox(width: 48), // FAB space
             _NavItem(icon: Icons.favorite_rounded, label: 'Saved', isActive: _selectedIndex == 2, onTap: () => setState(() => _selectedIndex = 2)),
             _NavItem(icon: Icons.person_rounded, label: 'Profile', isActive: _selectedIndex == 3, onTap: () {
@@ -477,7 +486,7 @@ class _CategoryChip extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: kNavy.withOpacity(0.25),
+                color: kNavy.withValues(alpha: 0.25),
                 blurRadius: 8,
                 offset: const Offset(0, 3),
               ),
@@ -513,7 +522,7 @@ class _FeaturedCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
+            color: Colors.black.withValues(alpha: 0.07),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -532,7 +541,7 @@ class _FeaturedCard extends StatelessWidget {
               child: Icon(
                 item['icon'] as IconData? ?? Icons.inventory_2,
                 size: 44,
-                color: kNavy.withOpacity(0.5),
+                color: kNavy.withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -563,7 +572,7 @@ class _FeaturedCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: kGold.withOpacity(0.2),
+                        color: kGold.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -595,7 +604,7 @@ class _ListingCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -614,7 +623,7 @@ class _ListingCard extends StatelessWidget {
                 child: Icon(
                   item['icon'] as IconData? ?? Icons.inventory_2,
                   size: 40,
-                  color: kNavy.withOpacity(0.45),
+                  color: kNavy.withValues(alpha: 0.45),
                 ),
               ),
             ),
