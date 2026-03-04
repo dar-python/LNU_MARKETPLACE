@@ -3,10 +3,12 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    container_name: lnu_app
-    working_dir: /var/www
     volumes:
-      - ./laravel-backend:/var/www
+      - ./:/var/www
+    env_file:
+      - .env
+    environment:
+      RUN_MIGRATIONS: "0" # set to "1" if you want auto-migrate on boot (dev only)
     depends_on:
       - db
     networks:
@@ -18,7 +20,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./laravel-backend:/var/www
+      - ./:/var/www
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - app

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
-import 'home_page.dart'; 
+import 'auth_service.dart';
+import 'backend_status_page.dart';
+import 'home_page.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
 import 'register_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AuthService().init();
   runApp(const MyApp());
 }
 
@@ -21,7 +25,8 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
         '/profile': (context) => const ProfilePage(),
-      }, 
+        '/backend-status': (context) => const BackendStatusPage(),
+      },
     );
   }
 }
