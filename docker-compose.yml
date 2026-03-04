@@ -4,9 +4,9 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     volumes:
-      - ./:/var/www
+      - ./laravel-backend:/var/www
     env_file:
-      - .env
+      - ./laravel-backend/.env
     environment:
       RUN_MIGRATIONS: "0" # set to "1" if you want auto-migrate on boot (dev only)
     depends_on:
@@ -20,7 +20,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./:/var/www
+      - ./laravel-backend:/var/www
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
     depends_on:
       - app
