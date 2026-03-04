@@ -8,6 +8,7 @@ use App\Http\Requests\ResendEmailOtpRequest;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\VerifyEmailOtpRequest;
 use App\Mail\EmailOtpMail;
+use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\StudentIdPrefix;
 use App\Models\StudentVerification;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -42,8 +44,9 @@ class AuthController extends Controller
         [$firstName, $middleName, $lastName] = $this->splitName((string) $validated['name']);
         $otp = null;
         $otpExpiresAt = null;
+        $verificationId = null;
 
-        $user = DB::transaction(function () use ($request, $validated, $studentId, $studentIdPrefix, $firstName, $middleName, $lastName, $email, &$otp, &$otpExpiresAt): User {
+        $user = DB::transaction(function () use ($request, $validated, $studentId, $studentIdPrefix, $firstName, $middleName, $lastName, $email, &$otp, &$otpExpiresAt, &$verificationId): User {
             $user = User::query()->create([
                 'student_id' => $studentId,
                 'student_id_prefix' => $studentIdPrefix,
@@ -55,7 +58,7 @@ class AuthController extends Controller
                 ...$this->pendingStatusAttributes(),
             ]);
 
-            ['otp' => $otp, 'expires_at' => $otpExpiresAt] = $this->createPendingVerification(
+            ['otp' => $otp, 'expires_at' => $otpExpiresAt, 'verification_id' => $verificationId] = $this->createPendingVerification(
                 $user,
                 $email,
                 $request->ip()
@@ -68,7 +71,30 @@ class AuthController extends Controller
 
         if ($email !== null && is_string($otp) && $otpExpiresAt instanceof CarbonInterface) {
             $this->sendEmailOtp($email, $otp, $otpExpiresAt);
+
+            $this->logActivity(
+                $request,
+                'auth.email_otp_sent',
+                $user,
+                'Email OTP sent after registration.',
+                [
+                    'verification_id' => $verificationId,
+                    'expires_at' => $otpExpiresAt->toIso8601String(),
+                ],
+                $user
+            );
         }
+
+        $this->logActivity(
+            $request,
+            'auth.registered',
+            $user,
+            'User registration completed.',
+            [
+                'requires_email_verification' => $email !== null,
+            ],
+            $user
+        );
 
         return ApiResponse::success(
             'Registration successful. Please verify your email using the OTP.',
@@ -96,16 +122,50 @@ class AuthController extends Controller
         $user = $query->first();
 
         if (! $user || ! Hash::check($password, $user->password)) {
+            $this->logActivity(
+                $request,
+                'auth.login_failed',
+                $user,
+                'Login failed due to invalid credentials.',
+                [
+                    'identifier' => $identifier,
+                    'reason' => 'invalid_credentials',
+                ],
+                $user
+            );
+
             return ApiResponse::error('Invalid credentials.', null, 401);
         }
 
         if ($user->isBlockedFromLogin()) {
+            $this->logActivity(
+                $request,
+                'auth.login_blocked',
+                $user,
+                'Login blocked because account is suspended.',
+                [
+                    'reason' => 'account_suspended',
+                ],
+                $user
+            );
+
             return ApiResponse::error('Account suspended.', [
                 'code' => 'ACCOUNT_SUSPENDED',
             ], 403);
         }
 
         if ($user->email !== null && $user->email_verified_at === null) {
+            $this->logActivity(
+                $request,
+                'auth.login_blocked',
+                $user,
+                'Login blocked because email is not verified.',
+                [
+                    'reason' => 'email_not_verified',
+                ],
+                $user
+            );
+
             return ApiResponse::error('Email not verified yet.', [
                 'code' => 'EMAIL_NOT_VERIFIED',
                 'identifier' => $user->email,
@@ -125,6 +185,17 @@ class AuthController extends Controller
         $plainTextToken = $user->createToken('mobile-api', $abilities)->plainTextToken;
         $user->forceFill(['last_login_at' => now()])->save();
 
+        $this->logActivity(
+            $request,
+            'auth.login_success',
+            $user,
+            'User logged in successfully.',
+            [
+                'abilities' => $abilities,
+            ],
+            $user
+        );
+
         return ApiResponse::success('Login successful.', [
             'token' => $plainTextToken,
             'token_type' => 'Bearer',
@@ -134,7 +205,35 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()?->currentAccessToken()?->delete();
+        $user = $request->user();
+        $currentToken = $user?->currentAccessToken();
+        $bearerToken = $request->bearerToken();
+
+        if (! $currentToken && is_string($bearerToken) && $bearerToken !== '') {
+            $resolvedToken = PersonalAccessToken::findToken($bearerToken);
+
+            if (
+                $resolvedToken !== null
+                && $resolvedToken->tokenable_id === $user?->id
+                && $resolvedToken->tokenable_type === $user?->getMorphClass()
+            ) {
+                $currentToken = $resolvedToken;
+            }
+        }
+
+        $tokenId = $currentToken?->id;
+        $currentToken?->delete();
+
+        $this->logActivity(
+            $request,
+            'auth.logout',
+            $user,
+            'User logged out.',
+            [
+                'token_id' => $tokenId,
+            ],
+            $user
+        );
 
         return ApiResponse::success('Logged out.');
     }
@@ -156,10 +255,32 @@ class AuthController extends Controller
         $user = $this->findUserByIdentifier($identifier);
 
         if (! $user || $user->email === null) {
+            $this->logActivity(
+                $request,
+                'auth.email_otp_verify_failed',
+                null,
+                'OTP verification failed due to invalid identifier.',
+                [
+                    'identifier' => $identifier,
+                    'reason' => 'invalid_request',
+                ]
+            );
+
             return ApiResponse::error('Invalid OTP request.', null, 422);
         }
 
         if ($user->email_verified_at !== null) {
+            $this->logActivity(
+                $request,
+                'auth.email_otp_verify_skipped',
+                $user,
+                'OTP verification skipped because email is already verified.',
+                [
+                    'reason' => 'already_verified',
+                ],
+                $user
+            );
+
             return ApiResponse::success('Email already verified.');
         }
 
@@ -171,6 +292,17 @@ class AuthController extends Controller
             ->first();
 
         if (! $verification) {
+            $this->logActivity(
+                $request,
+                'auth.email_otp_verify_failed',
+                $user,
+                'OTP verification failed because no pending OTP was found.',
+                [
+                    'reason' => 'no_pending_otp',
+                ],
+                $user
+            );
+
             return ApiResponse::error('No pending OTP verification found.', null, 422);
         }
 
@@ -180,11 +312,37 @@ class AuthController extends Controller
                 'failure_reason' => 'OTP expired',
             ]);
 
+            $this->logActivity(
+                $request,
+                'auth.email_otp_verify_failed',
+                $user,
+                'OTP verification failed because OTP expired.',
+                [
+                    'verification_id' => $verification->id,
+                    'reason' => 'otp_expired',
+                ],
+                $user
+            );
+
             return ApiResponse::error('OTP expired.', null, 422);
         }
 
         if (! hash_equals((string) $verification->otp_hash, $this->hashOtp($otp))) {
+            $nextAttemptCount = $verification->attempt_count + 1;
             $verification->increment('attempt_count');
+
+            $this->logActivity(
+                $request,
+                'auth.email_otp_verify_failed',
+                $user,
+                'OTP verification failed because OTP is invalid.',
+                [
+                    'verification_id' => $verification->id,
+                    'reason' => 'invalid_otp',
+                    'attempt_count' => $nextAttemptCount,
+                ],
+                $user
+            );
 
             return ApiResponse::error('Invalid OTP.', null, 422);
         }
@@ -202,6 +360,17 @@ class AuthController extends Controller
             ])->save();
         });
 
+        $this->logActivity(
+            $request,
+            'auth.email_otp_verified',
+            $user,
+            'Email OTP verified successfully.',
+            [
+                'verification_id' => $verification->id,
+            ],
+            $user
+        );
+
         return ApiResponse::success('Email verified.');
     }
 
@@ -212,14 +381,36 @@ class AuthController extends Controller
         $user = $this->findUserByIdentifier($identifier);
 
         if (! $user || $user->email === null) {
+            $this->logActivity(
+                $request,
+                'auth.email_otp_resend_failed',
+                null,
+                'OTP resend failed due to invalid identifier.',
+                [
+                    'identifier' => $identifier,
+                    'reason' => 'invalid_request',
+                ]
+            );
+
             return ApiResponse::error('Invalid OTP request.', null, 422);
         }
 
         if ($user->email_verified_at !== null) {
+            $this->logActivity(
+                $request,
+                'auth.email_otp_resend_skipped',
+                $user,
+                'OTP resend skipped because email is already verified.',
+                [
+                    'reason' => 'already_verified',
+                ],
+                $user
+            );
+
             return ApiResponse::success('Email already verified.');
         }
 
-        StudentVerification::query()
+        $expiredCount = StudentVerification::query()
             ->where('user_id', $user->id)
             ->where('verification_type', 'email_otp')
             ->where('status', 'pending')
@@ -228,17 +419,41 @@ class AuthController extends Controller
                 'failure_reason' => 'Superseded by resend',
             ]);
 
-        ['otp' => $otp, 'expires_at' => $expiresAt] = $this->createPendingVerification(
+        ['otp' => $otp, 'expires_at' => $expiresAt, 'verification_id' => $verificationId] = $this->createPendingVerification(
             $user,
             $user->email,
             $request->ip()
         );
 
         if (! is_string($otp) || ! $expiresAt instanceof CarbonInterface) {
+            $this->logActivity(
+                $request,
+                'auth.email_otp_resend_failed',
+                $user,
+                'OTP resend failed because OTP generation did not return valid data.',
+                [
+                    'reason' => 'otp_generation_failed',
+                ],
+                $user
+            );
+
             return ApiResponse::error('Unable to resend OTP.', null, 500);
         }
 
         $this->sendEmailOtp($user->email, $otp, $expiresAt);
+
+        $this->logActivity(
+            $request,
+            'auth.email_otp_resent',
+            $user,
+            'Email OTP resent successfully.',
+            [
+                'expired_pending_records' => $expiredCount,
+                'verification_id' => $verificationId,
+                'expires_at' => $expiresAt->toIso8601String(),
+            ],
+            $user
+        );
 
         return ApiResponse::success('OTP resent.');
     }
@@ -263,7 +478,7 @@ class AuthController extends Controller
     }
 
     /**
-     * @return array{otp: ?string, expires_at: CarbonInterface}
+     * @return array{otp: ?string, expires_at: CarbonInterface, verification_id: int}
      */
     private function createPendingVerification(User $user, ?string $email, ?string $ipAddress): array
     {
@@ -272,7 +487,7 @@ class AuthController extends Controller
         if ($email !== null && $email !== '') {
             $otp = $this->generateOtp();
 
-            StudentVerification::query()->create([
+            $verification = StudentVerification::query()->create([
                 'user_id' => $user->id,
                 'verification_type' => 'email_otp',
                 'token_hash' => null,
@@ -288,10 +503,11 @@ class AuthController extends Controller
             return [
                 'otp' => $otp,
                 'expires_at' => $expiresAt,
+                'verification_id' => $verification->id,
             ];
         }
 
-        StudentVerification::query()->create([
+        $verification = StudentVerification::query()->create([
             'user_id' => $user->id,
             'verification_type' => 'email_link',
             'token_hash' => null,
@@ -307,7 +523,35 @@ class AuthController extends Controller
         return [
             'otp' => null,
             'expires_at' => $expiresAt,
+            'verification_id' => $verification->id,
         ];
+    }
+
+    /**
+     * @param array<string, mixed>|null $metadata
+     */
+    private function logActivity(
+        Request $request,
+        string $actionType,
+        ?User $actor,
+        ?string $description = null,
+        ?array $metadata = null,
+        ?User $subject = null
+    ): void {
+        try {
+            ActivityLog::query()->create([
+                'actor_user_id' => $actor?->id,
+                'action_type' => $actionType,
+                'subject_type' => $subject?->getMorphClass(),
+                'subject_id' => $subject?->id,
+                'description' => $description,
+                'metadata' => $metadata,
+                'ip_address' => $request->ip(),
+                'user_agent' => substr((string) $request->userAgent(), 0, 512),
+            ]);
+        } catch (\Throwable $throwable) {
+            report($throwable);
+        }
     }
 
     /**
