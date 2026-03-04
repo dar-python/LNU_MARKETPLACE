@@ -16,8 +16,10 @@ class StudentIdPrefixSeeder extends Seeder
         $tokens = array_values(array_filter(array_map('trim', explode(',', $raw))));
 
         if ($tokens === []) {
-            // Example local default only. Override with STUDENT_ID_PREFIXES, e.g. "23,24".
-            $tokens = ['23'];
+            $tokens = array_values(array_filter(array_map(
+                static fn ($value): string => trim((string) $value),
+                (array) config('lnu.allowed_student_id_prefixes', ['210', '220', '230', '240', '250', '260', '270', '280'])
+            )));
         }
 
         $allowedPrefixes = [];
@@ -25,13 +27,13 @@ class StudentIdPrefixSeeder extends Seeder
         foreach ($tokens as $token) {
             if (preg_match('/^\d{2}$/', $token) === 1) {
                 $year = 2000 + (int) $token;
-                $prefix = $token;
+                $prefix = $token.'0';
             } elseif (preg_match('/^\d{3}$/', $token) === 1 && str_ends_with($token, '0')) {
                 $year = 2000 + (int) substr($token, 0, 2);
-                $prefix = substr($token, 0, 2);
+                $prefix = $token;
             } elseif (preg_match('/^\d{4}$/', $token) === 1) {
                 $year = (int) $token;
-                $prefix = substr($token, -2);
+                $prefix = substr($token, -2).'0';
             } else {
                 continue;
             }
@@ -43,8 +45,8 @@ class StudentIdPrefixSeeder extends Seeder
         }
 
         if ($allowedPrefixes === []) {
-            $allowedPrefixes['23'] = [
-                'prefix' => '23',
+            $allowedPrefixes['230'] = [
+                'prefix' => '230',
                 'enrollment_year' => 2023,
             ];
         }
