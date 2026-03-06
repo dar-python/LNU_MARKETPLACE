@@ -142,7 +142,7 @@ class ListingImagesApiTest extends TestCase
             'title' => 'Original title',
             'description' => 'Original description',
             'price' => '120.00',
-            'item_condition' => 'good',
+            'item_condition' => 'preowned',
             'quantity' => 1,
             'is_negotiable' => false,
             'campus_location' => 'LNU',
