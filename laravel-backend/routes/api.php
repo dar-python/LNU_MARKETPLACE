@@ -23,6 +23,8 @@ Route::prefix('v1')->group(function (): void {
         });
     });
 
+    Route::get('/listings', [ListingController::class, 'index']);
+
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::apiResource('listings', ListingController::class)->only([
             'store',

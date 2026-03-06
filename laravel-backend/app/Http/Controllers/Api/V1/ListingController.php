@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ListingBrowseRequest;
 use App\Models\Listing;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -22,6 +25,21 @@ class ListingController extends Controller
         'good',
         'fair',
         'poor',
+        'brandnew',
+        'preowned',
+    ];
+
+    /**
+     * @var array<string, string>
+     */
+    private const ITEM_CONDITION_NORMALIZATION_MAP = [
+        'new' => 'brandnew',
+        'like_new' => 'preowned',
+        'good' => 'preowned',
+        'fair' => 'preowned',
+        'poor' => 'preowned',
+        'brandnew' => 'brandnew',
+        'preowned' => 'preowned',
     ];
 
     /**
@@ -37,6 +55,105 @@ class ListingController extends Controller
         'archived',
     ];
 
+    /**
+     * @var list<string>
+     */
+    private const BROWSE_VISIBLE_STATUSES = [
+        'available',
+        'reserved',
+        'sold',
+    ];
+
+    /**
+     * @var array<string, array{0: string, 1: string}>
+     */
+    private const BROWSE_SORT_MAP = [
+        'newest' => ['created_at', 'desc'],
+        'oldest' => ['created_at', 'asc'],
+        'price_asc' => ['price', 'asc'],
+        'price_desc' => ['price', 'desc'],
+        'title_asc' => ['title', 'asc'],
+        'title_desc' => ['title', 'desc'],
+    ];
+
+    public function index(ListingBrowseRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $search = trim((string) ($validated['q'] ?? ''));
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $sortBy = (string) ($validated['sort_by'] ?? 'newest');
+        $sortDirOverride = $validated['sort_dir'] ?? null;
+        [$sortColumn, $sortDirection] = self::BROWSE_SORT_MAP[$sortBy];
+
+        if (is_string($sortDirOverride) && in_array($sortDirOverride, ['asc', 'desc'], true)) {
+            $sortDirection = $sortDirOverride;
+        }
+
+        $query = Listing::query()
+            ->whereIn('listing_status', self::BROWSE_VISIBLE_STATUSES)
+            ->where('is_flagged', false);
+
+        if (Schema::hasColumn('listings', 'approved_at')) {
+            $query->whereNotNull('approved_at');
+        }
+
+        if (Schema::hasColumn('users', 'is_disabled')) {
+            $query->whereHas('user', static function (Builder $builder): void {
+                $builder->where('is_disabled', false);
+            });
+        }
+
+        if ($search !== '') {
+            $searchPattern = '%'.$search.'%';
+            $locationColumns = $this->searchableLocationColumns();
+
+            $query->where(function (Builder $builder) use ($searchPattern, $locationColumns): void {
+                $builder
+                    ->where('title', 'like', $searchPattern)
+                    ->orWhere('description', 'like', $searchPattern);
+
+                foreach ($locationColumns as $column) {
+                    $builder->orWhere($column, 'like', $searchPattern);
+                }
+            });
+        }
+
+        if (isset($validated['category_id'])) {
+            $query->where('category_id', (int) $validated['category_id']);
+        }
+
+        if (isset($validated['min_price'])) {
+            $query->where('price', '>=', $validated['min_price']);
+        }
+
+        if (isset($validated['max_price'])) {
+            $query->where('price', '<=', $validated['max_price']);
+        }
+
+        if (isset($validated['condition'])) {
+            $query->where('item_condition', (string) $validated['condition']);
+        }
+
+        if (isset($validated['status'])) {
+            $query->where('listing_status', (string) $validated['status']);
+        }
+
+        $paginator = $query
+            ->orderBy($sortColumn, $sortDirection)
+            ->orderBy('id', $sortDirection)
+            ->paginate($perPage);
+
+        return ApiResponse::success('Listings retrieved successfully.', [
+            'listings' => $paginator->items(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+            ],
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate($this->validationRules());
@@ -47,7 +164,7 @@ class ListingController extends Controller
             'title' => (string) $validated['title'],
             'description' => (string) $validated['description'],
             'price' => $validated['price'],
-            'item_condition' => (string) $validated['item_condition'],
+            'item_condition' => $this->normalizeItemCondition((string) $validated['item_condition']),
             'quantity' => (int) ($validated['quantity'] ?? 1),
             'is_negotiable' => (bool) ($validated['is_negotiable'] ?? false),
             'campus_location' => $validated['campus_location'] ?? null,
@@ -72,7 +189,7 @@ class ListingController extends Controller
             'title' => (string) $validated['title'],
             'description' => (string) $validated['description'],
             'price' => $validated['price'],
-            'item_condition' => (string) $validated['item_condition'],
+            'item_condition' => $this->normalizeItemCondition((string) $validated['item_condition']),
             'quantity' => (int) ($validated['quantity'] ?? 1),
             'is_negotiable' => (bool) ($validated['is_negotiable'] ?? false),
             'campus_location' => $validated['campus_location'] ?? null,
@@ -145,5 +262,24 @@ class ListingController extends Controller
         $userId = $request->user()?->id;
 
         return is_int($userId) && $userId === (int) $listing->user_id;
+    }
+
+    private function normalizeItemCondition(string $itemCondition): string
+    {
+        return self::ITEM_CONDITION_NORMALIZATION_MAP[$itemCondition] ?? 'preowned';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function searchableLocationColumns(): array
+    {
+        $columns = ['campus_location'];
+
+        if (Schema::hasColumn('listings', 'meetup_location')) {
+            $columns[] = 'meetup_location';
+        }
+
+        return $columns;
     }
 }
