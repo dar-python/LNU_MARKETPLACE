@@ -4,6 +4,7 @@ import 'login_page.dart';
 import 'profile_page.dart';
 import 'browse_page.dart';
 import 'add_listing_page.dart';
+import 'favorite_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -31,8 +32,16 @@ class _HomePageState extends State<HomePage> {
     {'icon': Icons.laptop_rounded, 'label': 'Gadgets'},
     {'icon': Icons.science_rounded, 'label': 'Lab Tools'},
     {'icon': Icons.food_bank_rounded, 'label': 'Food'},
-    {'icon': Icons.more_horiz_rounded, 'label': 'More'},
+    {'icon': Icons.local_drink_rounded, 'label': 'Drinks'},
+    {'icon': Icons.accessibility_rounded, 'label': 'Accessories'},
+    {'icon': Icons.sports_basketball_rounded, 'label': 'Sports'},
+    {'icon': Icons.electrical_services_rounded, 'label': 'Electronics'},
+    {'icon': Icons.inventory_2_rounded, 'label': 'Others'},
   ];
+
+  //'Gadgets', 'Lab Tools', 'Sports Equipment',
+   // 'School Supplies', 'Services', 'Clothing', 'Electronics',
+    //'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
 
   // Empty lists — ready for your real data
   final List<Map<String, dynamic>> _featuredItems = [];
@@ -442,7 +451,9 @@ class _HomePageState extends State<HomePage> {
             }),
 
             const SizedBox(width: 48),
-            _NavItem(icon: Icons.favorite_rounded, label: 'Saved', isActive: _selectedIndex == 2, onTap: () => setState(() => _selectedIndex = 2)),
+            _NavItem(icon: Icons.favorite_rounded, label: 'Saved', isActive: _selectedIndex == 2, onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()));
+            }),
             _NavItem(icon: Icons.person_rounded, label: 'Profile', isActive: _selectedIndex == 3, onTap: () {
               if (AuthService().isLoggedIn) {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
