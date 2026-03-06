@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'listing_model_page.dart';
+import 'favorite_service.dart';
+import 'Inquiry_service.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -7,12 +9,38 @@ const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
-class ListingDetailPage extends StatelessWidget {
+class ListingDetailPage extends StatefulWidget {
   final Listing listing;
   const ListingDetailPage({super.key, required this.listing});
 
   @override
+  State<ListingDetailPage> createState() => _ListingDetailPageState();
+}
+
+class _ListingDetailPageState extends State<ListingDetailPage> {
+  bool get _isFavorite => FavoritesService().isFavorite(widget.listing.id);
+
+  void _toggleFavorite() {
+    final wasAlreadyFavorite = _isFavorite;
+    setState(() {
+      FavoritesService().toggleFavorite(widget.listing);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          wasAlreadyFavorite ? 'Removed from favorites' : 'Added to favorites',
+        ),
+        backgroundColor: kNavy,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final listing = widget.listing;
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
       body: CustomScrollView(
@@ -42,12 +70,12 @@ class ListingDetailPage extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(
-                    Icons.favorite_border,
-                    color: kWhite,
+                  icon: Icon(
+                    _isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: _isFavorite ? Colors.red.shade300 : kWhite,
                     size: 20,
                   ),
-                  onPressed: () {},
+                  onPressed: _toggleFavorite,
                 ),
               ),
             ],
@@ -137,13 +165,13 @@ class ListingDetailPage extends StatelessWidget {
                         bgColor: listing.condition == 'New'
                             ? Colors.green.shade100
                             : listing.condition == 'Good'
-                            ? Colors.blue.shade100
-                            : Colors.orange.shade100,
+                                ? Colors.blue.shade100
+                                : Colors.orange.shade100,
                         textColor: listing.condition == 'New'
                             ? Colors.green.shade700
                             : listing.condition == 'Good'
-                            ? Colors.blue.shade700
-                            : Colors.orange.shade700,
+                                ? Colors.blue.shade700
+                                : Colors.orange.shade700,
                       ),
                     ],
                   ),
@@ -218,9 +246,9 @@ class ListingDetailPage extends StatelessWidget {
                                 size: 14,
                               ),
                               const SizedBox(width: 3),
-                              Text(
+                              const Text(
                                 '4.8',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: kNavy,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 12,
@@ -306,6 +334,52 @@ class ListingDetailPage extends StatelessWidget {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 24),
+
+                  // ── Send Inquiry Button ─────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        InquiryService().sendInquiry(
+                          listingId: listing.id,
+                          listingTitle: listing.title,
+                          listingPrice: listing.price,
+                          listingCategory: listing.category,
+                          message: 'Is this still available?',
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Inquiry sent!'),
+                            backgroundColor: kNavy,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const Text(
+                        'Send Inquiry',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kNavy,
+                        foregroundColor: kGold,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 24),
                 ],
               ),

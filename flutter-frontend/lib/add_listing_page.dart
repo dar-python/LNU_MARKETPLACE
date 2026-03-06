@@ -29,10 +29,11 @@ class _AddListingPageState extends State<AddListingPage> {
 
   final List<String> _categories = [
     'Gadgets', 'Lab Tools', 'Sports Equipment',
-    'School Supplies', 'Services', 'Clothing', 'Electronics',
+    'School Supplies', 'Clothing', 'Electronics',
+    'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
   ];
 
-  final List<String> _conditions = ['New', 'Good', 'Fair'];
+  final List<String> _conditions = ['Brand New', 'Pre-owned'];
 
   final ImagePicker _picker = ImagePicker();
 
@@ -331,9 +332,9 @@ class _AddListingPageState extends State<AddListingPage> {
                               child: Column(
                                 children: [
                                   Icon(
-                                    cond == 'New' ? Icons.fiber_new_rounded
-                                        : cond == 'Good' ? Icons.thumb_up_outlined
-                                        : Icons.info_outline,
+                                    cond == 'Brand New'
+                                        ? Icons.fiber_new_rounded
+                                        : Icons.recycling_rounded,
                                     color: isSelected ? kGold : Colors.grey[400],
                                     size: 20,
                                   ),

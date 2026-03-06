@@ -17,13 +17,9 @@ class _BrowsePageState extends State<BrowsePage> {
   String _searchQuery = '';
 
   final List<String> _categories = [
-    'Gadgets',
-    'Lab Tools',
-    'Sports Equipment',
-    'School Supplies',
-    'Services',
-    'Clothing',
-    'Electronics',
+    'Gadgets', 'Lab Tools', 'Sports', 'Equipment',
+    'School Supplies', 'Clothing', 'Electronics',
+    'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
   ];
 
   List<Listing> get _filteredListings {
@@ -229,7 +225,7 @@ class _ListingCard extends StatelessWidget {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => ListingDetailPage(listing: listing)),
-      ),
+      ).then((_) => (context as Element).markNeedsBuild()),
       child: Container(
         decoration: BoxDecoration(
           color: kWhite,

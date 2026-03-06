@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'login_page.dart';
 import 'home_page.dart';
+import 'favorite_page.dart';
+import 'Inquiry_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -162,8 +164,12 @@ class ProfilePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     _MenuItem(icon: Icons.person_outline, label: 'Edit Profile', onTap: () {}),
-                    _MenuItem(icon: Icons.store_outlined, label: 'My Listings', onTap: () {}),
-                    _MenuItem(icon: Icons.favorite_outline, label: 'Saved Items', onTap: () {}),
+                    _MenuItem(icon: Icons.store_outlined, label: 'My Listings', onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const InquiryPage()));
+                    }),
+                    _MenuItem(icon: Icons.favorite_outline, label: 'Saved Items', onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()));
+                    }),
                     _MenuItem(icon: Icons.history, label: 'Purchase History', onTap: () {}),
                     const SizedBox(height: 20),
                     const Text(
