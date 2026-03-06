@@ -3,6 +3,7 @@ import 'auth_service.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
 import 'browse_page.dart';
+import 'add_listing_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -353,7 +354,7 @@ class _HomePageState extends State<HomePage> {
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: _featuredItems.length,
-                separatorBuilder: (_, index) => const SizedBox(width: 12),
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   return _FeaturedCard(item: _featuredItems[index]);
                 },
@@ -439,7 +440,8 @@ class _HomePageState extends State<HomePage> {
             _NavItem(icon: Icons.explore_rounded, label: 'Browse', isActive: _selectedIndex == 1, onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const BrowsePage()));
             }),
-            const SizedBox(width: 48), // FAB space
+
+            const SizedBox(width: 48),
             _NavItem(icon: Icons.favorite_rounded, label: 'Saved', isActive: _selectedIndex == 2, onTap: () => setState(() => _selectedIndex = 2)),
             _NavItem(icon: Icons.person_rounded, label: 'Profile', isActive: _selectedIndex == 3, onTap: () {
               if (AuthService().isLoggedIn) {
@@ -454,12 +456,19 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+
+
   Widget _buildFAB() {
     return FloatingActionButton(
       backgroundColor: kGold,
       foregroundColor: kNavy,
-      elevation: 4,
-      onPressed: () {},
+      elevation: 6,
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AddListingPage()),
+        );
+      },
       child: const Icon(Icons.add_rounded, size: 28),
     );
   }

@@ -3,9 +3,11 @@ import 'home_page.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
 import 'register_page.dart';
+import 'auth_service.dart';
 
-
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AuthService().init();
   runApp(const MyApp());
 }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'browse_page.dart';
+import 'listing_model_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -42,7 +42,11 @@ class ListingDetailPage extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.favorite_border, color: kWhite, size: 20),
+                  icon: const Icon(
+                    Icons.favorite_border,
+                    color: kWhite,
+                    size: 20,
+                  ),
                   onPressed: () {},
                 ),
               ),
@@ -56,13 +60,20 @@ class ListingDetailPage extends StatelessWidget {
                     end: Alignment.bottomCenter,
                   ),
                 ),
-                child: Center(
-                  child: Icon(
-                    listing.icon,
-                    size: 100,
-                    color: kNavy.withValues(alpha: 0.25),
-                  ),
-                ),
+                child: listing.imageFile != null
+                    ? Image.file(
+                        listing.imageFile!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      )
+                    : Center(
+                        child: Icon(
+                          listing.icon,
+                          size: 100,
+                          color: kNavy.withValues(alpha: 0.25),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -74,7 +85,6 @@ class ListingDetailPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // ── Title + Price Row ───────────────────────────────────
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +102,10 @@ class ListingDetailPage extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: kNavy,
                           borderRadius: BorderRadius.circular(12),
@@ -113,20 +126,24 @@ class ListingDetailPage extends StatelessWidget {
                   // ── Tags Row ────────────────────────────────────────────
                   Row(
                     children: [
-                      _Tag(label: listing.category, bgColor: kGold, textColor: kNavy),
+                      _Tag(
+                        label: listing.category,
+                        bgColor: kGold,
+                        textColor: kNavy,
+                      ),
                       const SizedBox(width: 8),
                       _Tag(
                         label: listing.condition,
                         bgColor: listing.condition == 'New'
                             ? Colors.green.shade100
                             : listing.condition == 'Good'
-                                ? Colors.blue.shade100
-                                : Colors.orange.shade100,
+                            ? Colors.blue.shade100
+                            : Colors.orange.shade100,
                         textColor: listing.condition == 'New'
                             ? Colors.green.shade700
                             : listing.condition == 'Good'
-                                ? Colors.blue.shade700
-                                : Colors.orange.shade700,
+                            ? Colors.blue.shade700
+                            : Colors.orange.shade700,
                       ),
                     ],
                   ),
@@ -176,20 +193,30 @@ class ListingDetailPage extends StatelessWidget {
                               const SizedBox(height: 2),
                               Text(
                                 'LNU Student Seller',
-                                style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF4F6FF),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.star_rounded, color: kGold, size: 14),
+                              const Icon(
+                                Icons.star_rounded,
+                                color: kGold,
+                                size: 14,
+                              ),
                               const SizedBox(width: 3),
                               Text(
                                 '4.8',
@@ -267,8 +294,15 @@ class ListingDetailPage extends StatelessWidget {
                     child: Column(
                       children: [
                         _DetailRow(label: 'Category', value: listing.category),
-                        _DetailRow(label: 'Condition', value: listing.condition),
-                        _DetailRow(label: 'Seller', value: listing.seller, isLast: true),
+                        _DetailRow(
+                          label: 'Condition',
+                          value: listing.condition,
+                        ),
+                        _DetailRow(
+                          label: 'Seller',
+                          value: listing.seller,
+                          isLast: true,
+                        ),
                       ],
                     ),
                   ),
@@ -279,7 +313,6 @@ class ListingDetailPage extends StatelessWidget {
           ),
         ],
       ),
-
     );
   }
 }
@@ -289,7 +322,11 @@ class _Tag extends StatelessWidget {
   final String label;
   final Color bgColor;
   final Color textColor;
-  const _Tag({required this.label, required this.bgColor, required this.textColor});
+  const _Tag({
+    required this.label,
+    required this.bgColor,
+    required this.textColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +338,11 @@ class _Tag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(color: textColor, fontSize: 11, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -311,22 +352,33 @@ class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isLast;
-  const _DetailRow({required this.label, required this.value, this.isLast = false});
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       decoration: BoxDecoration(
-        border: isLast ? null : Border(
-          bottom: BorderSide(color: Colors.grey.shade100),
-        ),
+        border: isLast
+            ? null
+            : Border(bottom: BorderSide(color: Colors.grey.shade100)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-          Text(value, style: const TextStyle(color: kNavy, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: kNavy,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

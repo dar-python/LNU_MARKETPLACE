@@ -1,9 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'register_page.dart';
-import 'profile_page.dart';
-import 'verify_otp_page.dart';
-import 'forgotpassword.dart';
+import 'login_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -11,96 +9,138 @@ const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({
-    super.key,
-    this.loginHandler,
-    this.authErrorCodeResolver,
-    this.authErrorIdentifierResolver,
-  });
+class ResetPasswordPage extends StatefulWidget {
+  const ResetPasswordPage({super.key, required this.identifier});
 
-  final Future<String?> Function({
-    required String studentId,
-    required String password,
-  })?
-  loginHandler;
-  final String? Function()? authErrorCodeResolver;
-  final String? Function()? authErrorIdentifierResolver;
+  final String identifier;
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<ResetPasswordPage> createState() => _ResetPasswordPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
-  final _studentIdController = TextEditingController();
+class _ResetPasswordPageState extends State<ResetPasswordPage> {
+  final _otpController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _isLoading = false;
-  String? _errorMessage;
+  final _confirmPasswordController = TextEditingController();
 
-  Future<void> _login() async {
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _isLoading = false;
+  bool _isResending = false;
+  int _cooldownSeconds = 30;
+  Timer? _cooldownTimer;
+  String? _errorMessage;
+  String? _infoMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCooldown();
+  }
+
+  @override
+  void dispose() {
+    _cooldownTimer?.cancel();
+    _otpController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _startCooldown() {
+    _cooldownTimer?.cancel();
+    setState(() => _cooldownSeconds = 30);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) { timer.cancel(); return; }
+      if (_cooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() => _cooldownSeconds = 0);
+        return;
+      }
+      setState(() => _cooldownSeconds -= 1);
+    });
+  }
+
+  Future<void> _resendOtp() async {
+    if (_isResending || _cooldownSeconds > 0) return;
+
+    _startCooldown();
+    setState(() {
+      _isResending = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    final error = await AuthService().forgotPassword(identifier: widget.identifier);
+
+    if (!mounted) return;
+    setState(() {
+      _isResending = false;
+      if (error != null) {
+        _errorMessage = error;
+      } else {
+        _infoMessage = 'OTP resent. Check your email.';
+      }
+    });
+  }
+
+  Future<void> _resetPassword() async {
+    final otp = _otpController.text.trim();
+    final password = _passwordController.text;
+    final confirm = _confirmPasswordController.text;
+
+    if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+      setState(() => _errorMessage = 'OTP must be exactly 6 digits.');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _errorMessage = 'Password is required.');
+      return;
+    }
+    if (password.length < 8) {
+      setState(() => _errorMessage = 'Password must be at least 8 characters.');
+      return;
+    }
+    if (password != confirm) {
+      setState(() => _errorMessage = 'Passwords do not match.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _infoMessage = null;
     });
 
-    final authService = AuthService();
-    final loginHandler = widget.loginHandler;
-    final error = await (loginHandler != null
-        ? loginHandler(
-            studentId: _studentIdController.text.trim(),
-            password: _passwordController.text,
-          )
-        : authService.login(
-            studentId: _studentIdController.text.trim(),
-            password: _passwordController.text,
-          ));
+    final error = await AuthService().resetPassword(
+      identifier: widget.identifier,
+      otp: otp,
+      password: password,
+      passwordConfirmation: confirm,
+    );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (error != null) {
-      final authErrorCode =
-          widget.authErrorCodeResolver?.call() ?? authService.lastAuthErrorCode;
-      final authErrorIdentifier =
-          widget.authErrorIdentifierResolver?.call() ??
-          authService.lastAuthErrorIdentifier;
-
-      if (authErrorCode == 'EMAIL_NOT_VERIFIED') {
-        final backendIdentifier = authErrorIdentifier;
-        final verifyIdentifier =
-            backendIdentifier != null && backendIdentifier.trim().isNotEmpty
-            ? backendIdentifier.trim()
-            : _studentIdController.text.trim();
-
-        if (!mounted) {
-          return;
-        }
-
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VerifyOtpPage(
-              identifier: verifyIdentifier,
-              loginIdentifier: _studentIdController.text.trim(),
-              loginPassword: _passwordController.text,
-            ),
-          ),
-        );
-        return;
-      }
-
       setState(() => _errorMessage = error);
     } else {
+      // Show success then go to login
+      setState(() => _infoMessage = 'Password reset successful!');
+      await Future.delayed(const Duration(seconds: 1));
       if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const ProfilePage()),
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final resendEnabled = !_isResending && _cooldownSeconds == 0;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
       body: SingleChildScrollView(
@@ -131,11 +171,11 @@ class _LoginPageState extends State<LoginPage> {
                       color: kGold,
                       border: Border.all(color: kWhite, width: 3),
                     ),
-                    child: const Icon(Icons.school, color: kNavy, size: 36),
+                    child: const Icon(Icons.key_rounded, color: kNavy, size: 36),
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    'LNU Marketplace',
+                    'Reset Password',
                     style: TextStyle(
                       color: kWhite,
                       fontSize: 22,
@@ -144,13 +184,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Leyte Normal University',
-                    style: TextStyle(
-                      color: kGold,
-                      fontSize: 12,
-                      letterSpacing: 1.2,
-                    ),
+                  Text(
+                    widget.identifier,
+                    style: const TextStyle(color: kGold, fontSize: 12),
                   ),
                 ],
               ),
@@ -164,7 +200,7 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const SizedBox(height: 8),
                   const Text(
-                    'Welcome Back!',
+                    'Enter OTP & New Password',
                     style: TextStyle(
                       color: kNavy,
                       fontSize: 22,
@@ -173,62 +209,78 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sign in to your account',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    'We sent a 6-digit OTP to your email. Enter it below along with your new password.',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.5),
                   ),
                   const SizedBox(height: 28),
 
-                  // Student ID
-                  _buildLabel('Student ID'),
+                  // OTP Field
+                  _buildLabel('OTP Code'),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    controller: _studentIdController,
-                    hint: 'Enter your Student ID (e.g. 2021-XXXXX)',
-                    icon: Icons.badge_outlined,
-                    keyboardType: TextInputType.text,
+                    controller: _otpController,
+                    hint: 'Enter 6-digit OTP',
+                    icon: Icons.pin_outlined,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
                   ),
+                  const SizedBox(height: 8),
+
+                  // Resend OTP
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: resendEnabled ? _resendOtp : null,
+                      child: Text(
+                        _cooldownSeconds > 0
+                            ? 'Resend OTP in ${_cooldownSeconds}s'
+                            : (_isResending ? 'Resending...' : 'Resend OTP'),
+                        style: TextStyle(
+                          color: resendEnabled ? kNavy : Colors.grey[400],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          decoration: resendEnabled ? TextDecoration.underline : null,
+                        ),
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 16),
 
-                  // Password
-                  _buildLabel('Password'),
+                  // New Password
+                  _buildLabel('New Password'),
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _passwordController,
-                    hint: 'Enter your password',
+                    hint: 'Enter new password',
                     icon: Icons.lock_outline,
                     obscure: _obscurePassword,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
+                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
                         color: Colors.grey[400],
                         size: 20,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
+                  const SizedBox(height: 16),
 
-                  // Forgot Password
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ForgotPasswordPage(),
-                        ),
+                  // Confirm Password
+                  _buildLabel('Confirm Password'),
+                  const SizedBox(height: 8),
+                  _buildTextField(
+                    controller: _confirmPasswordController,
+                    hint: 'Confirm new password',
+                    icon: Icons.lock_outline,
+                    obscure: _obscureConfirm,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.grey[400],
+                        size: 20,
                       ),
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          color: kNavy,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
+                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
                   ),
 
@@ -236,10 +288,7 @@ class _LoginPageState extends State<LoginPage> {
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
@@ -247,19 +296,37 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: Colors.red[400],
-                            size: 16,
-                          ),
+                          Icon(Icons.error_outline, color: Colors.red[400], size: 16),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(
-                                color: Colors.red[600],
-                                fontSize: 12,
-                              ),
+                              style: TextStyle(color: Colors.red[600], fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // Success message
+                  if (_infoMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_outline, color: Colors.green[400], size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _infoMessage!,
+                              style: TextStyle(color: Colors.green[600], fontSize: 12),
                             ),
                           ),
                         ],
@@ -269,12 +336,12 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 28),
 
-                  // Login Button
+                  // Reset Button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
+                      onPressed: _isLoading ? null : _resetPassword,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kNavy,
                         foregroundColor: kWhite,
@@ -293,7 +360,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             )
                           : const Text(
-                              'Sign In',
+                              'Reset Password',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
@@ -304,42 +371,11 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 24),
 
-                  // Register link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Don't have an account? ",
-                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const RegisterPage(),
-                          ),
-                        ),
-                        child: const Text(
-                          'Register',
-                          style: TextStyle(
-                            color: kNavy,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Back button
                   Center(
                     child: GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: Text(
-                        '← Back to Home',
+                        '← Back',
                         style: TextStyle(color: Colors.grey[400], fontSize: 12),
                       ),
                     ),
@@ -370,6 +406,7 @@ class _LoginPageState extends State<LoginPage> {
     required IconData icon,
     bool obscure = false,
     TextInputType keyboardType = TextInputType.text,
+    int? maxLength,
     Widget? suffixIcon,
   }) {
     return Container(
@@ -388,6 +425,7 @@ class _LoginPageState extends State<LoginPage> {
         controller: controller,
         obscureText: obscure,
         keyboardType: keyboardType,
+        maxLength: maxLength,
         style: const TextStyle(fontSize: 14, color: kNavy),
         decoration: InputDecoration(
           hintText: hint,
@@ -395,6 +433,7 @@ class _LoginPageState extends State<LoginPage> {
           prefixIcon: Icon(icon, color: kNavy, size: 20),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
+          counterText: '',
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
