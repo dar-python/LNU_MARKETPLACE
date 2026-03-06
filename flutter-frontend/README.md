@@ -48,19 +48,33 @@ Expected response:
 flutter pub get
 ```
 
-2. Android emulator:
+2. Run with project default API URL (fixed):
+
+```bash
+flutter run
+```
+
+Default is set in app config as:
+
+```bash
+http://192.168.1.3:8080
+```
+
+3. Override base URL only when needed (examples):
+
+- Android emulator host mapping:
 
 ```bash
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
 ```
 
-3. iOS simulator:
+- iOS simulator localhost:
 
 ```bash
 flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8080
 ```
 
-4. Physical device:
+- Physical device (same LAN as backend host):
 
 - If `adb reverse tcp:8080 tcp:8080` is configured, run:
 
@@ -79,6 +93,7 @@ flutter run --dart-define=API_BASE_URL=http://<LAN_IP>:8080
 - Android emulator cannot use `localhost` for host machine; use `10.0.2.2`.
 - Physical device can use `127.0.0.1` only when `adb reverse tcp:8080 tcp:8080` is active.
 - Without `adb reverse`, physical device must use host LAN IP, not `localhost`.
+- Flutter cannot set your machine NIC IP or default gateway. Configure those in OS/router.
 - If requests fail immediately, confirm containers are up: `docker compose ps`.
 - If port conflict occurs, free or remap `8080/3306/8081`.
 - Ensure backend `.env` uses `DB_HOST=db` (not `localhost`) in Docker.
@@ -91,5 +106,5 @@ flutter run --dart-define=API_BASE_URL=http://<LAN_IP>:8080
 Run from repo root:
 
 ```bash
-docker compose up -d && cd flutter-frontend && flutter pub get && flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+docker compose up -d && cd flutter-frontend && flutter pub get && flutter run
 ```
