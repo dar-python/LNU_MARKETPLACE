@@ -183,7 +183,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _studentIdController,
-                    hint: 'Enter your Student ID (e.g. 2021-XXXXX)',
+                    hint: 'Enter Student ID',
                     icon: Icons.badge_outlined,
                     keyboardType: TextInputType.text,
                   ),

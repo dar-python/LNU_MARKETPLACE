@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'auth_service.dart';
 import 'profile_page.dart';
@@ -46,7 +47,13 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
   }
 
   Future<void> _verifyOtp() async {
-    final otp = _otpController.text.trim();
+    final otp = _otpController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (otp != _otpController.text) {
+      _otpController.value = TextEditingValue(
+        text: otp,
+        selection: TextSelection.collapsed(offset: otp.length),
+      );
+    }
     if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
       setState(() {
         _errorMessage = 'OTP must be exactly 6 digits.';
@@ -129,7 +136,14 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
   }
 
   Future<void> _resendOtp() async {
-    if (_isResending || _cooldownSeconds > 0) {
+    if (_isResending) {
+      return;
+    }
+    if (_cooldownSeconds > 0) {
+      setState(() {
+        _errorMessage = null;
+        _infoMessage = 'You can resend OTP in $_cooldownSeconds seconds.';
+      });
       return;
     }
 
@@ -189,7 +203,6 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final resendEnabled = !_isResending && _cooldownSeconds == 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Verify OTP')),
@@ -217,6 +230,7 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
               TextField(
                 controller: _otpController,
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 textInputAction: TextInputAction.done,
                 maxLength: 6,
                 onSubmitted: (_) => _verifyOtp(),
@@ -279,7 +293,7 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
               SizedBox(
                 height: 48,
                 child: OutlinedButton(
-                  onPressed: resendEnabled ? _resendOtp : null,
+                  onPressed: _isResending ? null : _resendOtp,
                   child: Text(
                     _cooldownSeconds > 0
                         ? 'Resend OTP in ${_cooldownSeconds}s'

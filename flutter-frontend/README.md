@@ -1,16 +1,95 @@
-# flutter_lnu_marketplace
+# LNU Marketplace Flutter + Laravel (Dev Run Guide)
 
-A new Flutter project.
+## A) Prerequisites
 
-## Getting Started
+- Docker Desktop running
+- Flutter SDK installed and on PATH
+- Android Studio with at least one Android emulator OR a physical Android device
+- Optional: Xcode + iOS Simulator (macOS only)
+- Ports available: `8080` (Laravel web), `3306` (MySQL), `8081` (phpMyAdmin)
 
-This project is a starting point for a Flutter application.
+## B) Backend Steps (from repo root)
 
-A few resources to get you started if this is your first Flutter project:
+1. Start backend stack:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+docker compose up -d
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+2. First run only (or when schema changed):
+
+```bash
+docker compose exec app php artisan migrate --force
+```
+
+3. Optional seed data:
+
+```bash
+docker compose exec app php artisan db:seed --force
+```
+
+4. Verify API is up:
+
+```bash
+curl http://localhost:8080/api/ping
+```
+
+Expected response:
+
+```json
+{"ok":true}
+```
+
+## C) Flutter Steps (from `flutter-frontend`)
+
+1. Install dependencies:
+
+```bash
+flutter pub get
+```
+
+2. Android emulator:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+```
+
+3. iOS simulator:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8080
+```
+
+4. Physical device:
+
+- If `adb reverse tcp:8080 tcp:8080` is configured, run:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8080
+```
+
+- Otherwise use host machine LAN IP:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://<LAN_IP>:8080
+```
+
+## D) Common Troubleshooting
+
+- Android emulator cannot use `localhost` for host machine; use `10.0.2.2`.
+- Physical device can use `127.0.0.1` only when `adb reverse tcp:8080 tcp:8080` is active.
+- Without `adb reverse`, physical device must use host LAN IP, not `localhost`.
+- If requests fail immediately, confirm containers are up: `docker compose ps`.
+- If port conflict occurs, free or remap `8080/3306/8081`.
+- Ensure backend `.env` uses `DB_HOST=db` (not `localhost`) in Docker.
+- Android HTTP cleartext is enabled in debug manifest only; release should use HTTPS.
+- If auth fails unexpectedly, clear app storage/token and log in again.
+- If tests fail in container, run from repo root with Docker DB up.
+
+## E) One-Liner (Backend + Android Emulator)
+
+Run from repo root:
+
+```bash
+docker compose up -d && cd flutter-frontend && flutter pub get && flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080
+```

@@ -487,7 +487,6 @@ class AuthTest extends TestCase
                 'trace_id',
             ]);
     }
-
     public function test_login_with_wrong_password_returns_401_in_standard_error_envelope(): void
     {
         $user = $this->createUser('2301299', 'active', 'wrong-pass@lnu.edu.ph');
@@ -535,7 +534,6 @@ class AuthTest extends TestCase
             ->assertJsonPath('errors', null)
             ->assertJsonStructure(['trace_id']);
     }
-
     public function test_logout_invalidates_token_and_blocks_me_endpoint_afterward(): void
     {
         $user = $this->createUser('2301210', 'active');

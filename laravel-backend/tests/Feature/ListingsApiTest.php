@@ -99,7 +99,6 @@ class ListingsApiTest extends TestCase
                 'trace_id',
             ]);
     }
-
     public function test_owner_can_update_and_delete_listing(): void
     {
         $owner = $this->createUser('2307001');
@@ -213,7 +212,6 @@ class ListingsApiTest extends TestCase
             'user_id' => $owner->id,
         ]);
     }
-
     public function test_non_owner_cannot_update_or_delete_listing(): void
     {
         $owner = $this->createUser('2307002');

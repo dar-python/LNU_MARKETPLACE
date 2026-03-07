@@ -40,8 +40,8 @@ class _HomePageState extends State<HomePage> {
   ];
 
   //'Gadgets', 'Lab Tools', 'Sports Equipment',
-   // 'School Supplies', 'Services', 'Clothing', 'Electronics',
-    //'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
+  // 'School Supplies', 'Services', 'Clothing', 'Electronics',
+  //'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
 
   // Empty lists — ready for your real data
   final List<Map<String, dynamic>> _featuredItems = [];
@@ -250,7 +250,10 @@ class _HomePageState extends State<HomePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: kGold,
                     borderRadius: BorderRadius.circular(12),
@@ -281,7 +284,10 @@ class _HomePageState extends State<HomePage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kGold,
                     foregroundColor: kNavy,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -363,7 +369,7 @@ class _HomePageState extends State<HomePage> {
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: _featuredItems.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (context, index) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
                   return _FeaturedCard(item: _featuredItems[index]);
                 },
@@ -445,29 +451,58 @@ class _HomePageState extends State<HomePage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _NavItem(icon: Icons.home_rounded, label: 'Home', isActive: _selectedIndex == 0, onTap: () => setState(() => _selectedIndex = 0)),
-            _NavItem(icon: Icons.explore_rounded, label: 'Browse', isActive: _selectedIndex == 1, onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const BrowsePage()));
-            }),
-
-            const SizedBox(width: 48),
-            _NavItem(icon: Icons.favorite_rounded, label: 'Saved', isActive: _selectedIndex == 2, onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoritesPage()));
-            }),
-            _NavItem(icon: Icons.person_rounded, label: 'Profile', isActive: _selectedIndex == 3, onTap: () {
-              if (AuthService().isLoggedIn) {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage()));
-              } else {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage()));
-              }
-            }),
+            _NavItem(
+              icon: Icons.home_rounded,
+              label: 'Home',
+              isActive: _selectedIndex == 0,
+              onTap: () => setState(() => _selectedIndex = 0),
+            ),
+            _NavItem(
+              icon: Icons.explore_rounded,
+              label: 'Browse',
+              isActive: _selectedIndex == 1,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BrowsePage()),
+                );
+              },
+            ),
+            const SizedBox(width: 48), // FAB space
+            _NavItem(
+              icon: Icons.favorite_rounded,
+              label: 'Saved',
+              isActive: _selectedIndex == 2,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FavoritesPage()),
+                );
+              },
+            ),
+            _NavItem(
+              icon: Icons.person_rounded,
+              label: 'Profile',
+              isActive: _selectedIndex == 3,
+              onTap: () {
+                if (AuthService().isLoggedIn) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfilePage()),
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                  );
+                }
+              },
+            ),
           ],
         ),
       ),
     );
   }
-
-
 
   Widget _buildFAB() {
     return FloatingActionButton(
@@ -483,7 +518,6 @@ class _HomePageState extends State<HomePage> {
       child: const Icon(Icons.add_rounded, size: 28),
     );
   }
-
 }
 
 // ─── Sub-Widgets ──────────────────────────────────────────────────────────────
@@ -555,7 +589,9 @@ class _FeaturedCard extends StatelessWidget {
             height: 90,
             decoration: BoxDecoration(
               color: item['color'] as Color? ?? const Color(0xFFE3E8FF),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Center(
               child: Icon(
@@ -572,7 +608,11 @@ class _FeaturedCard extends StatelessWidget {
               children: [
                 Text(
                   item['title'] as String? ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: kNavy),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: kNavy,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -587,17 +627,28 @@ class _FeaturedCard extends StatelessWidget {
                   children: [
                     Text(
                       item['price'] as String? ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: kNavy),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: kNavy,
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: kGold.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         item['tag'] as String? ?? '',
-                        style: const TextStyle(fontSize: 9, color: kNavy, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: kNavy,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -637,7 +688,9 @@ class _ListingCard extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: item['color'] as Color? ?? const Color(0xFFE3E8FF),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
               ),
               child: Center(
                 child: Icon(
@@ -655,7 +708,11 @@ class _ListingCard extends StatelessWidget {
               children: [
                 Text(
                   item['title'] as String? ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: kNavy),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: kNavy,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -665,17 +722,28 @@ class _ListingCard extends StatelessWidget {
                   children: [
                     Text(
                       item['price'] as String? ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: kNavy),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: kNavy,
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: kNavy,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         item['condition'] as String? ?? '',
-                        style: const TextStyle(fontSize: 9, color: kGold, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: kGold,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],
@@ -709,11 +777,7 @@ class _NavItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            color: isActive ? kGold : Colors.white54,
-            size: 22,
-          ),
+          Icon(icon, color: isActive ? kGold : Colors.white54, size: 22),
           const SizedBox(height: 2),
           Text(
             label,

@@ -35,7 +35,6 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/favorites', [FavoriteController::class, 'index']);
         Route::post('/favorites', [FavoriteController::class, 'store']);
         Route::delete('/favorites/{listing}', [FavoriteController::class, 'destroy']);
-
         Route::apiResource('listings', ListingController::class)->only([
             'store',
             'update',

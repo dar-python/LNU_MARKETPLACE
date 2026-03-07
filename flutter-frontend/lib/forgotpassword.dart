@@ -87,7 +87,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       color: kGold,
                       border: Border.all(color: kWhite, width: 3),
                     ),
-                    child: const Icon(Icons.lock_reset_rounded, color: kNavy, size: 36),
+                    child: const Icon(
+                      Icons.lock_reset_rounded,
+                      color: kNavy,
+                      size: 36,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   const Text(
@@ -130,7 +134,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   const SizedBox(height: 4),
                   Text(
                     'Enter your Student ID or email and we\'ll send you an OTP to reset your password.',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.5),
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 28),
 
@@ -147,7 +155,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
@@ -155,12 +166,19 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: Colors.red[400], size: 16),
+                          Icon(
+                            Icons.error_outline,
+                            color: Colors.red[400],
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red[600], fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.red[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ],

@@ -21,7 +21,7 @@ class PasswordResetOtpMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'LNU Marketplace – Password Reset OTP',
+            subject: 'LNU Marketplace â€“ Password Reset OTP',
         );
     }
 
@@ -30,7 +30,7 @@ class PasswordResetOtpMail extends Mailable
         return new Content(
             view: 'emails.password_reset_otp',
             with: [
-                'otp'       => $this->otp,
+                'otp' => $this->otp,
                 'expiresAt' => $this->expiresAt,
             ],
         );

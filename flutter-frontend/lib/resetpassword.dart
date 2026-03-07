@@ -51,7 +51,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     _cooldownTimer?.cancel();
     setState(() => _cooldownSeconds = 30);
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_cooldownSeconds <= 1) {
         timer.cancel();
         setState(() => _cooldownSeconds = 0);
@@ -71,7 +74,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       _infoMessage = null;
     });
 
-    final error = await AuthService().forgotPassword(identifier: widget.identifier);
+    final error = await AuthService().forgotPassword(
+      identifier: widget.identifier,
+    );
 
     if (!mounted) return;
     setState(() {
@@ -171,7 +176,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       color: kGold,
                       border: Border.all(color: kWhite, width: 3),
                     ),
-                    child: const Icon(Icons.key_rounded, color: kNavy, size: 36),
+                    child: const Icon(
+                      Icons.key_rounded,
+                      color: kNavy,
+                      size: 36,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   const Text(
@@ -210,7 +219,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   const SizedBox(height: 4),
                   Text(
                     'We sent a 6-digit OTP to your email. Enter it below along with your new password.',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.5),
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 28),
 
@@ -239,7 +252,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           color: resendEnabled ? kNavy : Colors.grey[400],
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          decoration: resendEnabled ? TextDecoration.underline : null,
+                          decoration: resendEnabled
+                              ? TextDecoration.underline
+                              : null,
                         ),
                       ),
                     ),
@@ -257,11 +272,14 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     obscure: _obscurePassword,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: Colors.grey[400],
                         size: 20,
                       ),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -276,11 +294,14 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     obscure: _obscureConfirm,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                        _obscureConfirm
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         color: Colors.grey[400],
                         size: 20,
                       ),
-                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                      onPressed: () =>
+                          setState(() => _obscureConfirm = !_obscureConfirm),
                     ),
                   ),
 
@@ -288,7 +309,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red[50],
                         borderRadius: BorderRadius.circular(8),
@@ -296,12 +320,19 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: Colors.red[400], size: 16),
+                          Icon(
+                            Icons.error_outline,
+                            color: Colors.red[400],
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _errorMessage!,
-                              style: TextStyle(color: Colors.red[600], fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.red[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ],
@@ -313,7 +344,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   if (_infoMessage != null) ...[
                     const SizedBox(height: 12),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.green[50],
                         borderRadius: BorderRadius.circular(8),
@@ -321,12 +355,19 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle_outline, color: Colors.green[400], size: 16),
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.green[400],
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _infoMessage!,
-                              style: TextStyle(color: Colors.green[600], fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.green[600],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ],

@@ -121,7 +121,6 @@ class ListingImagesApiTest extends TestCase
             'uploaded_by_user_id' => $nonOwner->id,
         ]);
     }
-
     public function test_upload_invalid_file_type_or_oversize_returns_validation_error(): void
     {
         Storage::fake('public');
