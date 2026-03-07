@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'listing_model_page.dart';
-import 'favorite_service.dart';
-import 'Inquiry_service.dart';
 
-// ─── Color Palette ───────────────────────────────────────────────────────────
+import 'Inquiry_service.dart';
+import 'auth_service.dart';
+import 'favorite_service.dart';
+import 'listing_model_page.dart';
+
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
@@ -11,6 +12,7 @@ const kWhite = Color(0xFFFFFFFF);
 
 class ListingDetailPage extends StatefulWidget {
   final Listing listing;
+
   const ListingDetailPage({super.key, required this.listing});
 
   @override
@@ -18,18 +20,86 @@ class ListingDetailPage extends StatefulWidget {
 }
 
 class _ListingDetailPageState extends State<ListingDetailPage> {
-  bool get _isFavorite => FavoritesService().isFavorite(widget.listing.id);
+  bool _isFavorite = false;
+  bool _isLoadingFavoriteState = true;
+  bool _isUpdatingFavorite = false;
 
-  void _toggleFavorite() {
-    final wasAlreadyFavorite = _isFavorite;
+  @override
+  void initState() {
+    super.initState();
+    _loadFavoriteState();
+  }
+
+  Future<void> _loadFavoriteState() async {
+    if (!AuthService().isLoggedIn) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isFavorite = false;
+        _isLoadingFavoriteState = false;
+      });
+      return;
+    }
+
+    await FavoritesService().ensureLoaded();
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      FavoritesService().toggleFavorite(widget.listing);
+      _isFavorite = FavoritesService().isFavorite(widget.listing.id);
+      _isLoadingFavoriteState = false;
     });
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (!AuthService().isLoggedIn) {
+      _showSnackBar('Please log in to save favorites.');
+      return;
+    }
+
+    if (_isUpdatingFavorite) {
+      return;
+    }
+
+    final wasAlreadyFavorite = _isFavorite;
+
+    setState(() {
+      _isUpdatingFavorite = true;
+    });
+
+    final error = wasAlreadyFavorite
+        ? await FavoritesService().removeFavorite(widget.listing.id)
+        : await FavoritesService().addFavorite(widget.listing);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isUpdatingFavorite = false;
+      if (error == null) {
+        _isFavorite = !wasAlreadyFavorite;
+      }
+    });
+
+    if (error != null) {
+      _showSnackBar(error);
+      return;
+    }
+
+    _showSnackBar(
+      wasAlreadyFavorite ? 'Removed from favorites' : 'Added to favorites',
+    );
+  }
+
+  void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          wasAlreadyFavorite ? 'Removed from favorites' : 'Added to favorites',
-        ),
+        content: Text(message),
         backgroundColor: kNavy,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -41,12 +111,12 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   @override
   Widget build(BuildContext context) {
     final listing = widget.listing;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ── App Bar with Image ──────────────────────────────────────────
           SliverAppBar(
             expandedHeight: 260,
             pinned: true,
@@ -70,12 +140,23 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: Icon(
-                    _isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: _isFavorite ? Colors.red.shade300 : kWhite,
-                    size: 20,
-                  ),
-                  onPressed: _toggleFavorite,
+                  icon: _isLoadingFavoriteState || _isUpdatingFavorite
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(kWhite),
+                          ),
+                        )
+                      : Icon(
+                          _isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: _isFavorite ? Colors.red.shade300 : kWhite,
+                          size: 20,
+                        ),
+                  onPressed: _isLoadingFavoriteState || _isUpdatingFavorite
+                      ? null
+                      : _toggleFavorite,
                 ),
               ),
             ],
@@ -105,15 +186,12 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               ),
             ),
           ),
-
-          // ── Content ────────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Title + Price Row ───────────────────────────────────
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -150,8 +228,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // ── Tags Row ────────────────────────────────────────────
                   Row(
                     children: [
                       _Tag(
@@ -165,19 +241,17 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                         bgColor: listing.condition == 'New'
                             ? Colors.green.shade100
                             : listing.condition == 'Good'
-                                ? Colors.blue.shade100
-                                : Colors.orange.shade100,
+                            ? Colors.blue.shade100
+                            : Colors.orange.shade100,
                         textColor: listing.condition == 'New'
                             ? Colors.green.shade700
                             : listing.condition == 'Good'
-                                ? Colors.blue.shade700
-                                : Colors.orange.shade700,
+                            ? Colors.blue.shade700
+                            : Colors.orange.shade700,
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // ── Seller Card ─────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -261,8 +335,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ── Description ─────────────────────────────────────────
                   const Text(
                     'Description',
                     style: TextStyle(
@@ -296,8 +368,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // ── Item Details ────────────────────────────────────────
                   const Text(
                     'Item Details',
                     style: TextStyle(
@@ -335,8 +405,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ),
                   ),
                   const SizedBox(height: 24),
-
-                  // ── Send Inquiry Button ─────────────────────────────────
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -349,17 +417,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                           listingCategory: listing.category,
                           message: 'Is this still available?',
                         );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('Inquiry sent!'),
-                            backgroundColor: kNavy,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
+                        _showSnackBar('Inquiry sent!');
                       },
                       icon: const Icon(Icons.send_rounded, size: 18),
                       label: const Text(
@@ -379,7 +437,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 24),
                 ],
               ),
@@ -391,11 +448,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   }
 }
 
-// ─── Helper Widgets ───────────────────────────────────────────────────────────
 class _Tag extends StatelessWidget {
   final String label;
   final Color bgColor;
   final Color textColor;
+
   const _Tag({
     required this.label,
     required this.bgColor,
@@ -426,6 +483,7 @@ class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isLast;
+
   const _DetailRow({
     required this.label,
     required this.value,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\FavoriteController;
 use App\Http\Controllers\Api\V1\ListingController;
 use App\Http\Controllers\Api\V1\ListingImageController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,10 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/listings', [ListingController::class, 'index']);
 
     Route::middleware('auth:sanctum')->group(function (): void {
+        Route::get('/favorites', [FavoriteController::class, 'index']);
+        Route::post('/favorites', [FavoriteController::class, 'store']);
+        Route::delete('/favorites/{listing}', [FavoriteController::class, 'destroy']);
+
         Route::apiResource('listings', ListingController::class)->only([
             'store',
             'update',

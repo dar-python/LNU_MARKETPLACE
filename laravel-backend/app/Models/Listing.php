@@ -85,10 +85,15 @@ class Listing extends Model
         return $this->hasMany(Favorite::class);
     }
 
-    public function favoritedByUsers(): BelongsToMany
+    public function favoredBy(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'favorites')
             ->withTimestamps();
+    }
+
+    public function favoritedByUsers(): BelongsToMany
+    {
+        return $this->favoredBy();
     }
 
     public function inquiries(): HasMany

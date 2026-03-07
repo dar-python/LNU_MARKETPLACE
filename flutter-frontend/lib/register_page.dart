@@ -36,14 +36,6 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _errorMessage = 'Passwords do not match');
       return;
     }
-    if (_selectedBirthdate == null) {
-      setState(() => _errorMessage = 'Please select your birthdate');
-      return;
-    }
-    if (_selectedGender == null) {
-      setState(() => _errorMessage = 'Please select your gender');
-      return;
-    }
     if (!_agreedToPrivacy) {
       setState(
         () =>
@@ -72,15 +64,16 @@ class _RegisterPageState extends State<RegisterPage> {
     } else {
       if (!mounted) return;
       final emailIdentifier = _emailController.text.trim();
-      final verifyIdentifier = emailIdentifier.isNotEmpty
-          ? emailIdentifier
-          : _studentIdController.text.trim();
+      if (emailIdentifier.isEmpty) {
+        Navigator.pushReplacementNamed(context, '/login');
+        return;
+      }
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => VerifyOtpPage(
-            identifier: verifyIdentifier,
+            identifier: emailIdentifier,
             loginIdentifier: _studentIdController.text.trim(),
             loginPassword: _passwordController.text,
           ),
