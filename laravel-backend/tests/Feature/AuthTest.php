@@ -320,6 +320,113 @@ class AuthTest extends TestCase
         ]);
     }
 
+    public function test_verify_email_otp_marks_user_verified_and_updates_verification_status(): void
+    {
+        $user = $this->createUser('2301242', 'pending_verification', '2301242@lnu.edu.ph', false);
+        $verification = $this->createPendingEmailOtpVerification($user, '654321');
+
+        $this->postJson('/api/v1/auth/email/otp/verify', [
+            'identifier' => $user->email,
+            'otp' => '654321',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Email verified.')
+            ->assertJsonPath('data', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $user->refresh();
+        $verification->refresh();
+
+        $this->assertNotNull($user->email_verified_at);
+        $this->assertSame('verified', $verification->status);
+
+        if (Schema::hasColumn('users', 'status')) {
+            $this->assertSame('active', (string) $user->status);
+        } else {
+            $this->assertSame('active', (string) $user->account_status);
+        }
+    }
+
+    public function test_verify_email_otp_validation_errors_for_missing_required_fields(): void
+    {
+        $this->postJson('/api/v1/auth/email/otp/verify', [])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['identifier', 'otp'],
+                'trace_id',
+            ]);
+    }
+
+    public function test_verify_email_otp_rejects_invalid_otp_and_keeps_verification_pending(): void
+    {
+        $user = $this->createUser('2301243', 'pending_verification', '2301243@lnu.edu.ph', false);
+        $verification = $this->createPendingEmailOtpVerification($user, '123456');
+
+        $this->postJson('/api/v1/auth/email/otp/verify', [
+            'identifier' => $user->student_id,
+            'otp' => '999999',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Invalid OTP.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $verification->refresh();
+        $user->refresh();
+
+        $this->assertSame('pending', $verification->status);
+        $this->assertSame(1, $verification->attempt_count);
+        $this->assertNull($user->email_verified_at);
+    }
+
+    public function test_resend_email_otp_expires_previous_pending_record_and_creates_new_one(): void
+    {
+        Mail::fake();
+
+        $user = $this->createUser('2301244', 'pending_verification', '2301244@lnu.edu.ph', false);
+        $previousVerification = $this->createPendingEmailOtpVerification($user, '123456');
+
+        $this->postJson('/api/v1/auth/email/otp/resend', [
+            'identifier' => $user->student_id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'OTP resent.')
+            ->assertJsonPath('data', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $previousVerification->refresh();
+        $newVerification = StudentVerification::query()
+            ->where('user_id', $user->id)
+            ->where('verification_type', 'email_otp')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame('expired', $previousVerification->status);
+        $this->assertSame('Superseded by resend', $previousVerification->failure_reason);
+        $this->assertTrue($newVerification->id > $previousVerification->id);
+        $this->assertSame('pending', $newVerification->status);
+        $this->assertNotNull($newVerification->otp_hash);
+
+        Mail::assertSent(EmailOtpMail::class, 1);
+    }
+
+    public function test_resend_email_otp_validation_errors_for_missing_identifier(): void
+    {
+        $this->postJson('/api/v1/auth/email/otp/resend', [])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['identifier'],
+                'trace_id',
+            ]);
+    }
+
     public function test_email_otp_resend_endpoint_is_throttled(): void
     {
         Mail::fake();
@@ -369,6 +476,18 @@ class AuthTest extends TestCase
             ]);
     }
 
+    public function test_login_validation_errors_for_missing_required_fields(): void
+    {
+        $this->postJson('/api/v1/auth/login', [])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['identifier', 'password'],
+                'trace_id',
+            ]);
+    }
+
     public function test_login_with_wrong_password_returns_401_in_standard_error_envelope(): void
     {
         $user = $this->createUser('2301299', 'active', 'wrong-pass@lnu.edu.ph');
@@ -405,6 +524,16 @@ class AuthTest extends TestCase
             'actor_user_id' => $user->id,
             'action_type' => 'auth.logout',
         ]);
+    }
+
+    public function test_logout_requires_authentication(): void
+    {
+        $this->postJson('/api/v1/auth/logout')
+            ->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Unauthenticated.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
     }
 
     public function test_logout_invalidates_token_and_blocks_me_endpoint_afterward(): void
@@ -495,5 +624,21 @@ class AuthTest extends TestCase
         ]);
 
         return $user;
+    }
+
+    private function createPendingEmailOtpVerification(User $user, string $otp): StudentVerification
+    {
+        return StudentVerification::query()->create([
+            'user_id' => $user->id,
+            'verification_type' => 'email_otp',
+            'token_hash' => null,
+            'otp_hash' => hash('sha256', $otp),
+            'sent_to_email' => $user->email,
+            'status' => 'pending',
+            'attempt_count' => 0,
+            'expires_at' => now()->addMinutes(10),
+            'requested_ip' => '127.0.0.1',
+            'failure_reason' => null,
+        ]);
     }
 }

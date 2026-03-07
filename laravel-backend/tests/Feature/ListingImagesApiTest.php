@@ -61,11 +61,65 @@ class ListingImagesApiTest extends TestCase
                 'images' => [$image],
             ]);
 
-        $this->assertContains($response->status(), [200, 201]);
+        $response
+            ->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Listing image uploaded.')
+            ->assertJsonPath('data.image.listing_id', $listing->id)
+            ->assertJsonStructure([
+                'data' => ['image' => ['id', 'listing_id', 'image_path', 'sort_order', 'is_primary', 'uploaded_by_user_id']],
+                'trace_id',
+            ]);
 
         $storedImage = ListingImage::query()->where('listing_id', $listing->id)->latest('id')->first();
         $this->assertNotNull($storedImage);
         Storage::disk('public')->assertExists($storedImage->image_path);
+    }
+
+    public function test_upload_listing_image_requires_authentication(): void
+    {
+        Storage::fake('public');
+
+        $owner = $this->createUser('2307104');
+        $listing = $this->createListing($owner);
+        $image = UploadedFile::fake()->image('listing.jpg', 800, 800)->size(512);
+
+        $this->post('/api/v1/listings/'.$listing->id.'/images', [
+            'image' => $image,
+            'images' => [$image],
+        ])
+            ->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Unauthenticated.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_non_owner_cannot_upload_listing_image(): void
+    {
+        Storage::fake('public');
+
+        $owner = $this->createUser('2307105');
+        $nonOwner = $this->createUser('2307106');
+        $listing = $this->createListing($owner);
+        $token = $nonOwner->createToken('test-token')->plainTextToken;
+        $image = UploadedFile::fake()->image('listing.jpg', 800, 800)->size(512);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/api/v1/listings/'.$listing->id.'/images', [
+                'image' => $image,
+                'images' => [$image],
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Forbidden.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertDatabaseMissing('listing_images', [
+            'listing_id' => $listing->id,
+            'uploaded_by_user_id' => $nonOwner->id,
+        ]);
     }
 
     public function test_upload_invalid_file_type_or_oversize_returns_validation_error(): void
