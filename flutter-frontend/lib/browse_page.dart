@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'core/network/api_client.dart';
 import 'listing_detail_page.dart';
-import 'listing_service.dart';
 import 'listing_model_page.dart';
 
 // ─── Browse Page ──────────────────────────────────────────────────────────────
@@ -13,23 +13,104 @@ class BrowsePage extends StatefulWidget {
 
 class _BrowsePageState extends State<BrowsePage> {
   final TextEditingController _searchController = TextEditingController();
+  final ApiClient _apiClient = ApiClient();
+
   String _selectedCategory = 'All';
   String _searchQuery = '';
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<Listing> _listings = <Listing>[];
 
   final List<String> _categories = [
-    'Gadgets', 'Lab Tools', 'Sports', 'Equipment',
-    'School Supplies', 'Clothing', 'Electronics',
-    'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
+    'All',
+    'Gadgets',
+    'Lab Tools',
+    'Sports',
+    'Equipment',
+    'School Supplies',
+    'Clothing',
+    'Electronics',
+    'Books',
+    'Uniforms',
+    'Food',
+    'Drinks',
+    'Accessories',
+    'Others',
   ];
 
   List<Listing> get _filteredListings {
-    return ListingService().listings.where((listing) {
-      final matchesCategory = _selectedCategory == 'All' || listing.category == _selectedCategory;
-      final matchesSearch = listing.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+    return _listings.where((listing) {
+      final matchesCategory =
+          _selectedCategory == 'All' || listing.category == _selectedCategory;
+      final matchesSearch =
+          listing.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           listing.seller.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           listing.category.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     }).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadListings();
+  }
+
+  Future<void> _loadListings() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _apiClient.dio.get(
+        '/api/v1/listings',
+        queryParameters: const <String, dynamic>{'per_page': 50},
+      );
+
+      final body = response.data;
+      if (body is! Map<String, dynamic>) {
+        throw const FormatException('Invalid listings response.');
+      }
+
+      final payload = body['data'];
+      if (payload is! Map<String, dynamic>) {
+        throw const FormatException('Invalid listings payload.');
+      }
+
+      final rawListings = payload['listings'];
+      if (rawListings is! List) {
+        throw const FormatException('Invalid listings payload.');
+      }
+
+      final listings = rawListings
+          .whereType<Map>()
+          .map(
+            (rawListing) =>
+                Listing.fromApi(Map<String, dynamic>.from(rawListing)),
+          )
+          .toList();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _listings = listings;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+    }
   }
 
   @override
@@ -79,11 +160,22 @@ class _BrowsePageState extends State<BrowsePage> {
                       onChanged: (val) => setState(() => _searchQuery = val),
                       decoration: InputDecoration(
                         hintText: 'Search listings...',
-                        hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
-                        prefixIcon: const Icon(Icons.search, color: kNavy, size: 20),
+                        hintStyle: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 13,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: kNavy,
+                          size: 20,
+                        ),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
-                                icon: Icon(Icons.clear, color: Colors.grey[400], size: 18),
+                                icon: Icon(
+                                  Icons.clear,
+                                  color: Colors.grey[400],
+                                  size: 18,
+                                ),
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() => _searchQuery = '');
@@ -91,7 +183,9 @@ class _BrowsePageState extends State<BrowsePage> {
                               )
                             : null,
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),
@@ -113,7 +207,10 @@ class _BrowsePageState extends State<BrowsePage> {
                       onTap: () => setState(() => _selectedCategory = cat),
                       child: Container(
                         margin: const EdgeInsets.only(right: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: isSelected ? kNavy : const Color(0xFFF4F6FF),
                           borderRadius: BorderRadius.circular(20),
@@ -126,7 +223,9 @@ class _BrowsePageState extends State<BrowsePage> {
                           style: TextStyle(
                             color: isSelected ? kWhite : Colors.grey[600],
                             fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                           ),
                         ),
                       ),
@@ -152,7 +251,10 @@ class _BrowsePageState extends State<BrowsePage> {
                   if (_selectedCategory != 'All') ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: kGold,
                         borderRadius: BorderRadius.circular(10),
@@ -173,21 +275,81 @@ class _BrowsePageState extends State<BrowsePage> {
 
             // ── Listings Grid ─────────────────────────────────────────────────
             Expanded(
-              child: _filteredListings.isEmpty
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                      ),
+                    )
+                  : _errorMessage != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.cloud_off_rounded,
+                              size: 64,
+                              color: kNavy,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Unable to load listings',
+                              style: TextStyle(
+                                color: kNavy,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _loadListings,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: kNavy,
+                                foregroundColor: kWhite,
+                              ),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : _filteredListings.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search_off_rounded, size: 64, color: Colors.grey[300]),
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 64,
+                            color: Colors.grey[300],
+                          ),
                           const SizedBox(height: 12),
                           Text(
                             'No listings found',
-                            style: TextStyle(color: Colors.grey[400], fontSize: 15, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Try a different search or category',
-                            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -195,12 +357,13 @@ class _BrowsePageState extends State<BrowsePage> {
                   : GridView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                       physics: const BouncingScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.72,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.72,
+                          ),
                       itemCount: _filteredListings.length,
                       itemBuilder: (context, index) {
                         return _ListingCard(listing: _filteredListings[index]);
@@ -246,30 +409,50 @@ class _ListingCard extends StatelessWidget {
               height: 110,
               decoration: BoxDecoration(
                 color: listing.color,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
               ),
               child: Stack(
                 children: [
                   listing.imageFile != null
                       ? ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                          child: Image.file(listing.imageFile!, width: double.infinity, height: 110, fit: BoxFit.cover),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(16),
+                          ),
+                          child: Image.file(
+                            listing.imageFile!,
+                            width: double.infinity,
+                            height: 110,
+                            fit: BoxFit.cover,
+                          ),
                         )
                       : Center(
-                          child: Icon(listing.icon, size: 48, color: kNavy.withValues(alpha: 0.3)),
+                          child: Icon(
+                            listing.icon,
+                            size: 48,
+                            color: kNavy.withValues(alpha: 0.3),
+                          ),
                         ),
                   Positioned(
                     top: 8,
                     right: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: kNavy,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         listing.condition,
-                        style: const TextStyle(color: kGold, fontSize: 9, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          color: kGold,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -309,14 +492,21 @@ class _ListingCard extends StatelessWidget {
                         backgroundColor: kGold,
                         child: Text(
                           listing.sellerAvatar,
-                          style: const TextStyle(fontSize: 8, color: kNavy, fontWeight: FontWeight.w800),
+                          style: const TextStyle(
+                            fontSize: 8,
+                            color: kNavy,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           listing.seller,
-                          style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[500],
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),

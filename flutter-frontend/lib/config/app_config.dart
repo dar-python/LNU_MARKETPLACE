@@ -5,7 +5,7 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: String.fromEnvironment(
       'BASE_URL',
-      defaultValue: 'http://10.153.236.94:8080',
+      defaultValue: 'http://localhost:8080',
     ),
   );
 
