@@ -63,13 +63,13 @@ docker compose logs -f app
 
 ## Reproducible cURL Templates
 
-Base URL examples assume the backend is exposed at `http://localhost:8080`.
+Base URL examples assume the backend is exposed at `http://localhost:8082`.
 If your compose ports differ, replace host/port accordingly.
 
 ### Register
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/auth/register" \
+curl -X POST "http://localhost:8082/api/v1/auth/register" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{
@@ -84,7 +84,7 @@ curl -X POST "http://localhost:8080/api/v1/auth/register" \
 ### Login
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/auth/login" \
+curl -X POST "http://localhost:8082/api/v1/auth/login" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{
@@ -96,7 +96,7 @@ curl -X POST "http://localhost:8080/api/v1/auth/login" \
 ### Authenticated `me`
 
 ```bash
-curl -X GET "http://localhost:8080/api/v1/auth/me" \
+curl -X GET "http://localhost:8082/api/v1/auth/me" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer <TOKEN>"
 ```
@@ -104,7 +104,7 @@ curl -X GET "http://localhost:8080/api/v1/auth/me" \
 ### Logout
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/auth/logout" \
+curl -X POST "http://localhost:8082/api/v1/auth/logout" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer <TOKEN>"
 ```
@@ -112,7 +112,7 @@ curl -X POST "http://localhost:8080/api/v1/auth/logout" \
 ### Verify OTP
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/auth/email/otp/verify" \
+curl -X POST "http://localhost:8082/api/v1/auth/email/otp/verify" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{
@@ -124,7 +124,7 @@ curl -X POST "http://localhost:8080/api/v1/auth/email/otp/verify" \
 ### Resend OTP
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/auth/email/otp/resend" \
+curl -X POST "http://localhost:8082/api/v1/auth/email/otp/resend" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{

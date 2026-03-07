@@ -14,10 +14,10 @@ flutter test
 
 - Android emulator:
   - Use `10.0.2.2` to access host machine services.
-  - Example: `--dart-define=API_BASE_URL=http://10.0.2.2:8080`
+  - Example: `--dart-define=API_BASE_URL=http://10.0.2.2:8082`
 - Physical device:
   - Use your computer LAN IP on the same Wi-Fi network.
-  - Example: `--dart-define=API_BASE_URL=http://192.168.1.50:8080`
+  - Example: `--dart-define=API_BASE_URL=http://192.168.1.50:8082`
 - iOS simulator:
   - Usually `127.0.0.1` / `localhost` works for host services.
 
@@ -36,7 +36,7 @@ Example:
 
 ```bash
 flutter run -v \
-  --dart-define=API_BASE_URL=http://10.0.2.2:8080 \
+  --dart-define=API_BASE_URL=http://10.0.2.2:8082 \
   --dart-define=ENABLE_NETWORK_DEBUG_LOGS=true
 ```
 

@@ -85,23 +85,26 @@ class ApiClient {
             mappedMessage =
                 'Connection failed for ${AppConfig.baseUrl}. Check API_BASE_URL and network access.';
           }
-          break;
         case DioExceptionType.badCertificate:
           mappedMessage = 'TLS certificate validation failed.';
-          break;
         case DioExceptionType.cancel:
           mappedMessage = 'Request canceled.';
-          break;
         case DioExceptionType.badResponse:
           mappedMessage = _extractBackendMessage(error.response);
-          break;
         case DioExceptionType.unknown:
           if (error.error is SocketException) {
             mappedMessage = 'Network error. Please check your connection.';
           } else {
-            mappedMessage = error.message ?? 'Unexpected network error.';
+            final rawMessage = error.message?.trim();
+            if (rawMessage == null ||
+                rawMessage.isEmpty ||
+                rawMessage.toLowerCase() == 'xmlhttprequest error') {
+              mappedMessage =
+                  'Unexpected network error while contacting ${AppConfig.baseUrl}. Check API_BASE_URL and backend availability.';
+            } else {
+              mappedMessage = rawMessage;
+            }
           }
-          break;
       }
 
       _logMappedError(
