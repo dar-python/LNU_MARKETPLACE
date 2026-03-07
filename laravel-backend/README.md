@@ -18,17 +18,17 @@ docker compose exec app php artisan migrate:fresh --seed
 
 ```bash
 # List pending users
-curl -X GET "http://localhost:8080/api/v1/admin/users?status=pending" \
+curl -X GET "http://localhost:8082/api/v1/admin/users?status=pending" \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -H "Accept: application/json"
 
 # Approve user
-curl -X POST "http://localhost:8080/api/v1/admin/users/{id}/approve" \
+curl -X POST "http://localhost:8082/api/v1/admin/users/{id}/approve" \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -H "Accept: application/json"
 
 # Decline user
-curl -X POST "http://localhost:8080/api/v1/admin/users/{id}/decline" \
+curl -X POST "http://localhost:8082/api/v1/admin/users/{id}/decline" \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \

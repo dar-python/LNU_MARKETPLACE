@@ -45,5 +45,8 @@ docker compose exec app php artisan test --filter=AuthTest
 ```bash
 cd flutter-frontend
 flutter pub get
-flutter run
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8082
 ```
+
+Use `http://127.0.0.1:8082` instead when running on desktop or an iOS
+simulator.
