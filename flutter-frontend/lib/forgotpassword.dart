@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'register_page.dart';
-import 'profile_page.dart';
-import 'verify_otp_page.dart';
-import 'forgotpassword.dart';
+import 'resetpassword.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -11,90 +8,49 @@ const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({
-    super.key,
-    this.loginHandler,
-    this.authErrorCodeResolver,
-    this.authErrorIdentifierResolver,
-  });
-
-  final Future<String?> Function({
-    required String studentId,
-    required String password,
-  })?
-  loginHandler;
-  final String? Function()? authErrorCodeResolver;
-  final String? Function()? authErrorIdentifierResolver;
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
-  final _studentIdController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  final _identifierController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
-  Future<void> _login() async {
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendOtp() async {
+    final identifier = _identifierController.text.trim();
+    if (identifier.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your Student ID or email.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    final authService = AuthService();
-    final loginHandler = widget.loginHandler;
-    final error = await (loginHandler != null
-        ? loginHandler(
-            studentId: _studentIdController.text.trim(),
-            password: _passwordController.text,
-          )
-        : authService.login(
-            studentId: _studentIdController.text.trim(),
-            password: _passwordController.text,
-          ));
+    final error = await AuthService().forgotPassword(identifier: identifier);
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (error != null) {
-      final authErrorCode =
-          widget.authErrorCodeResolver?.call() ?? authService.lastAuthErrorCode;
-      final authErrorIdentifier =
-          widget.authErrorIdentifierResolver?.call() ??
-          authService.lastAuthErrorIdentifier;
-
-      if (authErrorCode == 'EMAIL_NOT_VERIFIED') {
-        final backendIdentifier = authErrorIdentifier;
-        final verifyIdentifier =
-            backendIdentifier != null && backendIdentifier.trim().isNotEmpty
-            ? backendIdentifier.trim()
-            : _studentIdController.text.trim();
-
-        if (!mounted) {
-          return;
-        }
-
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VerifyOtpPage(
-              identifier: verifyIdentifier,
-              loginIdentifier: _studentIdController.text.trim(),
-              loginPassword: _passwordController.text,
-            ),
-          ),
-        );
-        return;
-      }
-
       setState(() => _errorMessage = error);
     } else {
-      if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const ProfilePage()),
+        MaterialPageRoute(
+          builder: (_) => ResetPasswordPage(identifier: identifier),
+        ),
       );
     }
   }
@@ -131,11 +87,15 @@ class _LoginPageState extends State<LoginPage> {
                       color: kGold,
                       border: Border.all(color: kWhite, width: 3),
                     ),
-                    child: const Icon(Icons.school, color: kNavy, size: 36),
+                    child: const Icon(
+                      Icons.lock_reset_rounded,
+                      color: kNavy,
+                      size: 36,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    'LNU Marketplace',
+                    'Forgot Password',
                     style: TextStyle(
                       color: kWhite,
                       fontSize: 22,
@@ -145,7 +105,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Leyte Normal University',
+                    'LNU Marketplace',
                     style: TextStyle(
                       color: kGold,
                       fontSize: 12,
@@ -164,7 +124,7 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const SizedBox(height: 8),
                   const Text(
-                    'Welcome Back!',
+                    'Reset Your Password',
                     style: TextStyle(
                       color: kNavy,
                       fontSize: 22,
@@ -173,63 +133,22 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sign in to your account',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    'Enter your Student ID or email and we\'ll send you an OTP to reset your password.',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
                   ),
                   const SizedBox(height: 28),
 
-                  // Student ID
-                  _buildLabel('Student ID'),
+                  // Student ID / Email field
+                  _buildLabel('Student ID or Email'),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    controller: _studentIdController,
-                    hint: 'Enter Student ID',
-                    icon: Icons.badge_outlined,
-                    keyboardType: TextInputType.text,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password
-                  _buildLabel('Password'),
-                  const SizedBox(height: 8),
-                  _buildTextField(
-                    controller: _passwordController,
-                    hint: 'Enter your password',
-                    icon: Icons.lock_outline,
-                    obscure: _obscurePassword,
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: Colors.grey[400],
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-
-                  // Forgot Password
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ForgotPasswordPage(),
-                        ),
-                      ),
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          color: kNavy,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
+                    controller: _identifierController,
+                    hint: 'Enter your Student ID or email',
+                    icon: Icons.person_outline,
                   ),
 
                   // Error message
@@ -269,12 +188,12 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 28),
 
-                  // Login Button
+                  // Send OTP Button
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
+                      onPressed: _isLoading ? null : _sendOtp,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kNavy,
                         foregroundColor: kWhite,
@@ -293,7 +212,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             )
                           : const Text(
-                              'Sign In',
+                              'Send OTP',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
@@ -304,42 +223,12 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 24),
 
-                  // Register link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Don't have an account? ",
-                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const RegisterPage(),
-                          ),
-                        ),
-                        child: const Text(
-                          'Register',
-                          style: TextStyle(
-                            color: kNavy,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Back button
+                  // Back to login
                   Center(
                     child: GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: Text(
-                        '← Back to Home',
+                        '← Back to Login',
                         style: TextStyle(color: Colors.grey[400], fontSize: 12),
                       ),
                     ),
@@ -368,9 +257,6 @@ class _LoginPageState extends State<LoginPage> {
     required TextEditingController controller,
     required String hint,
     required IconData icon,
-    bool obscure = false,
-    TextInputType keyboardType = TextInputType.text,
-    Widget? suffixIcon,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -386,14 +272,12 @@ class _LoginPageState extends State<LoginPage> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: obscure,
-        keyboardType: keyboardType,
+        keyboardType: TextInputType.emailAddress,
         style: const TextStyle(fontSize: 14, color: kNavy),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
           prefixIcon: Icon(icon, color: kNavy, size: 20),
-          suffixIcon: suffixIcon,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),

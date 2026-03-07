@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'backend_status_page.dart';
 import 'login_page.dart';
+import 'home_page.dart';
+import 'favorite_page.dart';
+import 'Inquiry_page.dart';
 
 const kNavy = Color(0xFF000080);
 const kDarkNavy = Color(0xFF00263E);
@@ -99,9 +102,51 @@ class _ProfilePageState extends State<ProfilePage> {
                     bottomRight: Radius.circular(36),
                   ),
                 ),
-                padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                 child: Column(
-                  children: <Widget>[
+                  children: [
+                    // ── Home Button Row ──────────────────────────────────
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (_) => const HomePage()),
+                            (route) => false,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: kWhite.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: const [
+                                Icon(
+                                  Icons.home_rounded,
+                                  color: kWhite,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Home',
+                                  style: TextStyle(
+                                    color: kWhite,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Avatar
                     Container(
                       width: 80,
                       height: 80,
@@ -288,12 +333,26 @@ class _ProfilePageState extends State<ProfilePage> {
                     _MenuItem(
                       icon: Icons.store_outlined,
                       label: 'My Listings',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const InquiryPage(),
+                          ),
+                        );
+                      },
                     ),
                     _MenuItem(
                       icon: Icons.favorite_outline,
                       label: 'Saved Items',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const FavoritesPage(),
+                          ),
+                        );
+                      },
                     ),
                     _MenuItem(
                       icon: Icons.history,

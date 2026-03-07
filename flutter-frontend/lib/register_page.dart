@@ -41,11 +41,12 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _errorMessage = 'Full name is required');
       return;
     }
-    if (!RegExp(r'^(210|220|230|240|250|260|270|280)\d{4}$').hasMatch(studentId)) {
+    if (!RegExp(
+      r'^(210|220|230|240|250|260|270|280)\d{4}$',
+    ).hasMatch(studentId)) {
       setState(
-        () =>
-            _errorMessage =
-                'Student ID must be 7 digits with allowed prefix (210-280).',
+        () => _errorMessage =
+            'Student ID must be 7 digits with allowed prefix (210-280).',
       );
       return;
     }
@@ -59,17 +60,24 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
     }
-    if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$')
-        .hasMatch(password)) {
+    if (!RegExp(
+      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$',
+    ).hasMatch(password)) {
       setState(
-        () =>
-            _errorMessage =
-                'Password must be at least 8 chars with upper/lower/number/symbol.',
+        () => _errorMessage =
+            'Password must be at least 8 chars with upper/lower/number/symbol.',
       );
       return;
     }
     if (_passwordController.text != _confirmPasswordController.text) {
       setState(() => _errorMessage = 'Passwords do not match');
+      return;
+    }
+    if (!_agreedToPrivacy) {
+      setState(
+        () =>
+            _errorMessage = 'You must agree to the Privacy Policy to continue',
+      );
       return;
     }
 
@@ -93,17 +101,18 @@ class _RegisterPageState extends State<RegisterPage> {
     } else {
       if (!mounted) return;
       final emailIdentifier = _emailController.text.trim();
-      final verifyIdentifier = emailIdentifier.isNotEmpty
-          ? emailIdentifier
-          : studentId;
+      if (emailIdentifier.isEmpty) {
+        Navigator.pushReplacementNamed(context, '/login');
+        return;
+      }
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => VerifyOtpPage(
-            identifier: verifyIdentifier,
-            loginIdentifier: studentId,
-            loginPassword: password,
+            identifier: emailIdentifier,
+            loginIdentifier: _studentIdController.text.trim(),
+            loginPassword: _passwordController.text,
           ),
         ),
       );

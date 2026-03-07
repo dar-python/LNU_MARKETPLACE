@@ -220,6 +220,61 @@ class AuthService {
     }
   }
 
+  Future<String?> forgotPassword({required String identifier}) async {
+    final normalizedIdentifier = identifier.trim();
+    if (normalizedIdentifier.isEmpty) {
+      return 'Student ID or email is required.';
+    }
+
+    try {
+      await _apiClient.dio.post(
+        '/api/v1/auth/password/forgot',
+        data: <String, dynamic>{'identifier': normalizedIdentifier},
+      );
+      return null;
+    } catch (error) {
+      return _apiClient.mapError(error);
+    }
+  }
+
+  Future<String?> resetPassword({
+    required String identifier,
+    required String otp,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final normalizedIdentifier = identifier.trim();
+    final normalizedOtp = otp.trim();
+
+    if (normalizedIdentifier.isEmpty) {
+      return 'Identifier is required.';
+    }
+    if (normalizedOtp.length != 6) {
+      return 'OTP must be 6 digits.';
+    }
+    if (password.isEmpty) {
+      return 'Password is required.';
+    }
+    if (password != passwordConfirmation) {
+      return 'Passwords do not match.';
+    }
+
+    try {
+      await _apiClient.dio.post(
+        '/api/v1/auth/password/reset',
+        data: <String, dynamic>{
+          'identifier': normalizedIdentifier,
+          'otp': normalizedOtp,
+          'password': password,
+          'password_confirmation': passwordConfirmation,
+        },
+      );
+      return null;
+    } catch (error) {
+      return _apiClient.mapError(error);
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _apiClient.dio.post('/api/v1/auth/logout');

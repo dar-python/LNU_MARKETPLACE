@@ -54,6 +54,51 @@ class ListingsApiTest extends TestCase
             ->assertJsonStructure(['trace_id']);
     }
 
+    public function test_authenticated_user_can_create_listing(): void
+    {
+        $owner = $this->createUser('2307005');
+        $token = $owner->createToken('test-token')->plainTextToken;
+        $payload = $this->validListingPayload();
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/listings', $payload);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Listing created.')
+            ->assertJsonPath('data.listing.user_id', $owner->id)
+            ->assertJsonPath('data.listing.category_id', $payload['category_id'])
+            ->assertJsonPath('data.listing.title', $payload['title'])
+            ->assertJsonPath('data.listing.listing_status', $payload['listing_status'])
+            ->assertJsonStructure([
+                'data' => ['listing' => ['id', 'user_id', 'category_id', 'title', 'description', 'price', 'item_condition', 'listing_status']],
+                'trace_id',
+            ]);
+
+        $this->assertDatabaseHas('listings', [
+            'user_id' => $owner->id,
+            'category_id' => $payload['category_id'],
+            'title' => $payload['title'],
+            'listing_status' => $payload['listing_status'],
+        ]);
+    }
+
+    public function test_create_listing_validation_errors_for_missing_required_fields(): void
+    {
+        $owner = $this->createUser('2307006');
+        $token = $owner->createToken('test-token')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/listings', [])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['category_id', 'title', 'description', 'price', 'item_condition'],
+                'trace_id',
+            ]);
+    }
     public function test_owner_can_update_and_delete_listing(): void
     {
         $owner = $this->createUser('2307001');
@@ -77,6 +122,96 @@ class ListingsApiTest extends TestCase
         $this->assertContains($deleteResponse->status(), [200, 204]);
     }
 
+    public function test_update_listing_requires_authentication(): void
+    {
+        $owner = $this->createUser('2307007');
+        $listing = $this->createListing($owner);
+        $updateMethod = $this->updateHttpMethod();
+
+        $this->json($updateMethod, '/api/v1/listings/'.$listing->id, [
+            ...$this->validListingPayload($listing->category_id),
+            'title' => 'Unauthorized update attempt',
+        ])
+            ->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Unauthenticated.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_owner_can_update_listing(): void
+    {
+        $owner = $this->createUser('2307008');
+        $listing = $this->createListing($owner);
+        $token = $owner->createToken('test-token')->plainTextToken;
+        $updateMethod = $this->updateHttpMethod();
+
+        $payload = [
+            ...$this->validListingPayload($listing->category_id),
+            'title' => 'Updated listing title',
+            'description' => 'Updated description',
+            'price' => '199.99',
+            'listing_status' => 'reserved',
+            'status' => 'reserved',
+        ];
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->json($updateMethod, '/api/v1/listings/'.$listing->id, $payload)
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Listing updated.')
+            ->assertJsonPath('data.listing.id', $listing->id)
+            ->assertJsonPath('data.listing.title', $payload['title'])
+            ->assertJsonPath('data.listing.description', $payload['description'])
+            ->assertJsonPath('data.listing.price', $payload['price'])
+            ->assertJsonPath('data.listing.listing_status', $payload['listing_status'])
+            ->assertJsonStructure([
+                'data' => ['listing' => ['id', 'title', 'description', 'price', 'listing_status']],
+                'trace_id',
+            ]);
+
+        $this->assertDatabaseHas('listings', [
+            'id' => $listing->id,
+            'user_id' => $owner->id,
+            'title' => $payload['title'],
+            'description' => $payload['description'],
+            'price' => $payload['price'],
+            'listing_status' => $payload['listing_status'],
+        ]);
+    }
+
+    public function test_delete_listing_requires_authentication(): void
+    {
+        $owner = $this->createUser('2307009');
+        $listing = $this->createListing($owner);
+
+        $this->deleteJson('/api/v1/listings/'.$listing->id)
+            ->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Unauthenticated.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_owner_can_delete_listing(): void
+    {
+        $owner = $this->createUser('2307010');
+        $listing = $this->createListing($owner);
+        $token = $owner->createToken('test-token')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->deleteJson('/api/v1/listings/'.$listing->id)
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Listing deleted.')
+            ->assertJsonPath('data', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertSoftDeleted('listings', [
+            'id' => $listing->id,
+            'user_id' => $owner->id,
+        ]);
+    }
     public function test_non_owner_cannot_update_or_delete_listing(): void
     {
         $owner = $this->createUser('2307002');

@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ForgotPasswordRequest;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\ResendEmailOtpRequest;
 use App\Http\Requests\RegisterRequest;
+use App\Http\Requests\ResetPasswordRequest;
 use App\Http\Requests\VerifyEmailOtpRequest;
 use App\Mail\EmailOtpMail;
+use App\Mail\PasswordResetOtpMail;
 use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\StudentIdPrefix;
@@ -457,6 +460,147 @@ class AuthController extends Controller
 
         return ApiResponse::success('OTP resent.');
     }
+
+    // ── Forgot Password ───────────────────────────────────────────────────────
+
+    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $identifier = (string) $validated['identifier'];
+        $user = $this->findUserByIdentifier($identifier);
+
+        // Always return success to prevent user enumeration
+        if (! $user || $user->email === null) {
+            return ApiResponse::success('If that account exists, an OTP has been sent to the registered email.');
+        }
+
+        // Expire any existing pending password reset OTPs
+        StudentVerification::query()
+            ->where('user_id', $user->id)
+            ->where('verification_type', 'password_reset_otp')
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'expired',
+                'failure_reason' => 'Superseded by new request',
+            ]);
+
+        $expiresAt = now()->addMinutes((int) config('lnu.email_otp_expires_minutes', 10));
+        $otp = $this->generateOtp();
+
+        StudentVerification::query()->create([
+            'user_id'           => $user->id,
+            'verification_type' => 'password_reset_otp',
+            'token_hash'        => null,
+            'otp_hash'          => $this->hashOtp($otp),
+            'sent_to_email'     => $user->email,
+            'status'            => 'pending',
+            'attempt_count'     => 0,
+            'expires_at'        => $expiresAt,
+            'requested_ip'      => $request->ip(),
+            'failure_reason'    => null,
+        ]);
+
+        Mail::to($user->email)->send(new PasswordResetOtpMail($otp, $expiresAt));
+
+        $this->logActivity(
+            $request,
+            'auth.password_reset_otp_sent',
+            $user,
+            'Password reset OTP sent.',
+            ['expires_at' => $expiresAt->toIso8601String()],
+            $user
+        );
+
+        return ApiResponse::success('If that account exists, an OTP has been sent to the registered email.');
+    }
+
+    public function resetPassword(ResetPasswordRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $identifier = (string) $validated['identifier'];
+        $otp = (string) $validated['otp'];
+        $password = (string) $validated['password'];
+
+        $user = $this->findUserByIdentifier($identifier);
+
+        if (! $user) {
+            return ApiResponse::error('Invalid request.', null, 422);
+        }
+
+        $verification = StudentVerification::query()
+            ->where('user_id', $user->id)
+            ->where('verification_type', 'password_reset_otp')
+            ->where('status', 'pending')
+            ->latest('id')
+            ->first();
+
+        if (! $verification) {
+            return ApiResponse::error('No pending password reset OTP found. Please request a new one.', null, 422);
+        }
+
+        if ($verification->expires_at->isPast()) {
+            $verification->update([
+                'status'         => 'expired',
+                'failure_reason' => 'OTP expired',
+            ]);
+
+            $this->logActivity(
+                $request,
+                'auth.password_reset_failed',
+                $user,
+                'Password reset failed because OTP expired.',
+                ['verification_id' => $verification->id, 'reason' => 'otp_expired'],
+                $user
+            );
+
+            return ApiResponse::error('OTP expired. Please request a new one.', null, 422);
+        }
+
+        if (! hash_equals((string) $verification->otp_hash, $this->hashOtp($otp))) {
+            $verification->increment('attempt_count');
+
+            $this->logActivity(
+                $request,
+                'auth.password_reset_failed',
+                $user,
+                'Password reset failed because OTP is invalid.',
+                [
+                    'verification_id' => $verification->id,
+                    'reason'          => 'invalid_otp',
+                    'attempt_count'   => $verification->attempt_count + 1,
+                ],
+                $user
+            );
+
+            return ApiResponse::error('Invalid OTP.', null, 422);
+        }
+
+        DB::transaction(function () use ($user, $verification, $password): void {
+            $verification->update([
+                'status'      => 'verified',
+                'verified_at' => now(),
+                'failure_reason' => null,
+            ]);
+
+            $user->forceFill(['password' => Hash::make($password)])->save();
+
+            // Revoke all existing tokens so old sessions are invalidated
+            $user->tokens()->delete();
+        });
+
+        $this->logActivity(
+            $request,
+            'auth.password_reset_success',
+            $user,
+            'Password reset successfully.',
+            ['verification_id' => $verification->id],
+            $user
+        );
+
+        return ApiResponse::success('Password reset successfully. Please log in with your new password.');
+    }
+
+    // ── Private Helpers ───────────────────────────────────────────────────────
 
     private function assignDefaultRole(User $user): void
     {

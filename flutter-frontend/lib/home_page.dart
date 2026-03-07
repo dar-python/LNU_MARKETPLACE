@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
+import 'browse_page.dart';
+import 'add_listing_page.dart';
+import 'favorite_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
@@ -29,8 +32,16 @@ class _HomePageState extends State<HomePage> {
     {'icon': Icons.laptop_rounded, 'label': 'Gadgets'},
     {'icon': Icons.science_rounded, 'label': 'Lab Tools'},
     {'icon': Icons.food_bank_rounded, 'label': 'Food'},
-    {'icon': Icons.more_horiz_rounded, 'label': 'More'},
+    {'icon': Icons.local_drink_rounded, 'label': 'Drinks'},
+    {'icon': Icons.accessibility_rounded, 'label': 'Accessories'},
+    {'icon': Icons.sports_basketball_rounded, 'label': 'Sports'},
+    {'icon': Icons.electrical_services_rounded, 'label': 'Electronics'},
+    {'icon': Icons.inventory_2_rounded, 'label': 'Others'},
   ];
+
+  //'Gadgets', 'Lab Tools', 'Sports Equipment',
+  // 'School Supplies', 'Services', 'Clothing', 'Electronics',
+  //'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
 
   // Empty lists — ready for your real data
   final List<Map<String, dynamic>> _featuredItems = [];
@@ -88,28 +99,34 @@ class _HomePageState extends State<HomePage> {
             child: const Icon(Icons.school, color: kNavy, size: 20),
           ),
           const SizedBox(width: 10),
-          Flexible(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'LNU Marketplace',
-                  style: TextStyle(
-                    color: kWhite,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    letterSpacing: 0.5,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'LNU Marketplace',
+                    style: const TextStyle(
+                      color: kWhite,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      letterSpacing: 0.5,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  'Leyte Normal University',
-                  style: TextStyle(
-                    color: kGold,
-                    fontSize: 10,
-                    letterSpacing: 1.2,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Leyte Normal University',
+                    style: const TextStyle(
+                      color: kGold,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -444,14 +461,24 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.explore_rounded,
               label: 'Browse',
               isActive: _selectedIndex == 1,
-              onTap: () => setState(() => _selectedIndex = 1),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BrowsePage()),
+                );
+              },
             ),
             const SizedBox(width: 48), // FAB space
             _NavItem(
               icon: Icons.favorite_rounded,
               label: 'Saved',
               isActive: _selectedIndex == 2,
-              onTap: () => setState(() => _selectedIndex = 2),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FavoritesPage()),
+                );
+              },
             ),
             _NavItem(
               icon: Icons.person_rounded,
@@ -481,8 +508,13 @@ class _HomePageState extends State<HomePage> {
     return FloatingActionButton(
       backgroundColor: kGold,
       foregroundColor: kNavy,
-      elevation: 4,
-      onPressed: () {},
+      elevation: 6,
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AddListingPage()),
+        );
+      },
       child: const Icon(Icons.add_rounded, size: 28),
     );
   }
