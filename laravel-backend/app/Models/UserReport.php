@@ -13,6 +13,10 @@ class UserReport extends Model
     use DeletesStoredEvidence, HasFactory;
 
     public const STATUS_SUBMITTED = PostReport::STATUS_SUBMITTED;
+    public const STATUS_PENDING = PostReport::STATUS_PENDING;
+    public const STATUS_UNDER_REVIEW = PostReport::STATUS_UNDER_REVIEW;
+    public const STATUS_RESOLVED = PostReport::STATUS_RESOLVED;
+    public const STATUS_REJECTED = PostReport::STATUS_REJECTED;
 
     /**
      * @var list<string>

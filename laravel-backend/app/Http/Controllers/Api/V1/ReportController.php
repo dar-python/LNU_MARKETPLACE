@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ModerateReportActionRequest;
 use App\Http\Requests\ReportIndexRequest;
 use App\Http\Requests\ShowReportRequest;
 use App\Http\Requests\StoreReportRequest;
@@ -187,6 +188,36 @@ class ReportController extends Controller
                 $this->userReportQuery()->whereKey($report->id)->firstOrFail()
             ),
             'history' => $this->serializeUserReportStatusHistory($history),
+        ]);
+    }
+
+    public function disableListing(ModerateReportActionRequest $request, PostReport $postReport): JsonResponse
+    {
+        [$report, $listing, $history] = $this->disableReportedListing($request, $postReport);
+
+        return ApiResponse::success('Listing disabled.', [
+            'report' => $this->serializePostReport(
+                $this->postReportQuery()->whereKey($report->id)->firstOrFail()
+            ),
+            'listing' => $this->serializeListingModeration(
+                Listing::query()->whereKey($listing->id)->firstOrFail()
+            ),
+            'history' => $history ? $this->serializePostReportStatusHistory($history) : null,
+        ]);
+    }
+
+    public function suspendUser(ModerateReportActionRequest $request, UserReport $userReport): JsonResponse
+    {
+        [$report, $user, $history] = $this->suspendReportedUser($request, $userReport);
+
+        return ApiResponse::success('User suspended.', [
+            'report' => $this->serializeUserReport(
+                $this->userReportQuery()->whereKey($report->id)->firstOrFail()
+            ),
+            'user' => $this->serializeModeratedUser(
+                User::query()->whereKey($user->id)->firstOrFail()
+            ),
+            'history' => $history ? $this->serializeUserReportStatusHistory($history) : null,
         ]);
     }
 
@@ -422,6 +453,169 @@ class ReportController extends Controller
         return [$report, $history->loadMissing('changedBy:id,first_name,middle_name,last_name')];
     }
 
+    /**
+     * @return array{0: PostReport, 1: Listing, 2: PostReportStatusHistory|null}
+     */
+    private function disableReportedListing(ModerateReportActionRequest $request, PostReport $postReport): array
+    {
+        $adminNote = $request->validated('admin_note');
+        $report = null;
+        $listing = null;
+        $history = null;
+
+        DB::transaction(function () use ($request, $postReport, $adminNote, &$report, &$listing, &$history): void {
+            $report = PostReport::query()
+                ->whereKey($postReport->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $listing = Listing::query()
+                ->whereKey($report->listing_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $listingStatusBefore = (string) $listing->listing_status;
+            $reportStatusBefore = (string) $report->status;
+
+            if ($listingStatusBefore === 'suspended') {
+                throw ValidationException::withMessages([
+                    'listing' => ['The listing is already disabled.'],
+                ]);
+            }
+
+            $attributes = [
+                'listing_status' => 'suspended',
+            ];
+
+            if (is_string($adminNote)) {
+                $attributes['moderation_note'] = $adminNote;
+            }
+
+            $listing->forceFill($attributes)->save();
+
+            $history = $this->resolvePostReportAfterAction(
+                $report,
+                is_string($adminNote) ? $adminNote : null,
+                $request->user()?->id
+            );
+
+            $this->logListingDisabledActivity(
+                $request,
+                $listing,
+                $report,
+                $listingStatusBefore,
+                (string) $listing->listing_status,
+                $reportStatusBefore,
+                (string) $report->status,
+                is_string($adminNote) ? $adminNote : null
+            );
+        });
+
+        if (! $report instanceof PostReport || ! $listing instanceof Listing) {
+            throw new \RuntimeException('Unable to disable listing from report context.');
+        }
+
+        return [
+            $report,
+            $listing,
+            $history?->loadMissing('changedBy:id,first_name,middle_name,last_name'),
+        ];
+    }
+
+    /**
+     * @return array{0: UserReport, 1: User, 2: UserReportStatusHistory|null}
+     */
+    private function suspendReportedUser(ModerateReportActionRequest $request, UserReport $userReport): array
+    {
+        $adminNote = $request->validated('admin_note');
+        $report = null;
+        $user = null;
+        $history = null;
+
+        DB::transaction(function () use ($request, $userReport, $adminNote, &$report, &$user, &$history): void {
+            $report = UserReport::query()
+                ->whereKey($userReport->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $user = User::query()
+                ->whereKey($report->reported_user_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $user->loadMissing('roles:id,code');
+
+            if ($this->isAdminUser($user)) {
+                throw ValidationException::withMessages([
+                    'user' => ['Admin accounts cannot be suspended from report moderation.'],
+                ]);
+            }
+
+            $accountStatusBefore = $this->userAccountStatus($user);
+            $isDisabledBefore = Schema::hasColumn('users', 'is_disabled')
+                ? (bool) $user->is_disabled
+                : true;
+            $reportStatusBefore = (string) $report->status;
+
+            if ($accountStatusBefore === 'suspended' && $isDisabledBefore) {
+                throw ValidationException::withMessages([
+                    'user' => ['The user is already suspended.'],
+                ]);
+            }
+
+            $attributes = [
+                $this->userAccountStatusColumn() => 'suspended',
+            ];
+
+            if (Schema::hasColumn('users', 'is_disabled')) {
+                $attributes['is_disabled'] = true;
+            }
+
+            if (Schema::hasColumn('users', 'disabled_at')) {
+                $attributes['disabled_at'] = now();
+            }
+
+            if (Schema::hasColumn('users', 'suspended_until')) {
+                $attributes['suspended_until'] = null;
+            }
+
+            if (Schema::hasColumn('users', 'suspended_reason') && is_string($adminNote)) {
+                $attributes['suspended_reason'] = $adminNote;
+            }
+
+            $user->forceFill($attributes)->save();
+
+            $history = $this->resolveUserReportAfterAction(
+                $report,
+                is_string($adminNote) ? $adminNote : null,
+                $request->user()?->id
+            );
+
+            $this->logUserSuspendedActivity(
+                $request,
+                $user,
+                $report,
+                $accountStatusBefore,
+                $this->userAccountStatus($user),
+                $isDisabledBefore,
+                Schema::hasColumn('users', 'is_disabled') ? (bool) $user->is_disabled : true,
+                $reportStatusBefore,
+                (string) $report->status,
+                is_string($adminNote) ? $adminNote : null
+            );
+        });
+
+        if (! $report instanceof UserReport || ! $user instanceof User) {
+            throw new \RuntimeException('Unable to suspend user from report context.');
+        }
+
+        return [
+            $report,
+            $user,
+            $history?->loadMissing('changedBy:id,first_name,middle_name,last_name'),
+        ];
+    }
+
     private function recordPostReportHistory(
         PostReport $report,
         string $status,
@@ -501,6 +695,114 @@ class ReportController extends Controller
         ]);
     }
 
+    private function resolvePostReportAfterAction(
+        PostReport $report,
+        ?string $adminNote,
+        ?int $changedBy
+    ): ?PostReportStatusHistory {
+        if ((string) $report->status === PostReport::STATUS_RESOLVED) {
+            return null;
+        }
+
+        $report->forceFill([
+            'status' => PostReport::STATUS_RESOLVED,
+        ])->save();
+
+        return $this->recordPostReportHistory(
+            $report,
+            PostReport::STATUS_RESOLVED,
+            $adminNote,
+            $changedBy
+        );
+    }
+
+    private function resolveUserReportAfterAction(
+        UserReport $report,
+        ?string $adminNote,
+        ?int $changedBy
+    ): ?UserReportStatusHistory {
+        if ((string) $report->status === UserReport::STATUS_RESOLVED) {
+            return null;
+        }
+
+        $report->forceFill([
+            'status' => UserReport::STATUS_RESOLVED,
+        ])->save();
+
+        return $this->recordUserReportHistory(
+            $report,
+            UserReport::STATUS_RESOLVED,
+            $adminNote,
+            $changedBy
+        );
+    }
+
+    private function logListingDisabledActivity(
+        Request $request,
+        Listing $listing,
+        PostReport $report,
+        string $listingStatusBefore,
+        string $listingStatusAfter,
+        string $reportStatusBefore,
+        string $reportStatusAfter,
+        ?string $adminNote
+    ): void {
+        ActivityLog::query()->create([
+            'actor_user_id' => $request->user()?->id,
+            'action_type' => 'listing.disabled',
+            'subject_type' => $listing->getMorphClass(),
+            'subject_id' => $listing->id,
+            'description' => 'Listing disabled.',
+            'metadata' => [
+                'report_id' => $report->id,
+                'listing_id' => $listing->id,
+                'listing_status_from' => $listingStatusBefore,
+                'listing_status_to' => $listingStatusAfter,
+                'report_status_from' => $reportStatusBefore,
+                'report_status_to' => $reportStatusAfter,
+                'admin_note' => $adminNote,
+                'moderation_action' => 'disable_listing',
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 512),
+        ]);
+    }
+
+    private function logUserSuspendedActivity(
+        Request $request,
+        User $user,
+        UserReport $report,
+        string $accountStatusBefore,
+        string $accountStatusAfter,
+        bool $isDisabledBefore,
+        bool $isDisabledAfter,
+        string $reportStatusBefore,
+        string $reportStatusAfter,
+        ?string $adminNote
+    ): void {
+        ActivityLog::query()->create([
+            'actor_user_id' => $request->user()?->id,
+            'action_type' => 'user.suspended',
+            'subject_type' => $user->getMorphClass(),
+            'subject_id' => $user->id,
+            'description' => 'User suspended.',
+            'metadata' => [
+                'report_id' => $report->id,
+                'reported_user_id' => $user->id,
+                'account_status_from' => $accountStatusBefore,
+                'account_status_to' => $accountStatusAfter,
+                'is_disabled_from' => $isDisabledBefore,
+                'is_disabled_to' => $isDisabledAfter,
+                'report_status_from' => $reportStatusBefore,
+                'report_status_to' => $reportStatusAfter,
+                'admin_note' => $adminNote,
+                'moderation_action' => 'suspend_user',
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 512),
+        ]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -543,6 +845,47 @@ class ReportController extends Controller
             'created_at' => $report->created_at?->toISOString(),
             'updated_at' => $report->updated_at?->toISOString(),
             'user' => $this->transformUser($report->reportedUser),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeListingModeration(Listing $listing): array
+    {
+        return [
+            'id' => $listing->id,
+            'user_id' => (int) $listing->user_id,
+            'title' => $listing->title,
+            'listing_status' => (string) $listing->listing_status,
+            'is_flagged' => (bool) $listing->is_flagged,
+            'moderation_note' => $listing->moderation_note,
+            'updated_at' => $listing->updated_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeModeratedUser(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'full_name' => $user->fullName(),
+            'status' => $user->apiStatus(),
+            'is_disabled' => Schema::hasColumn('users', 'is_disabled')
+                ? (bool) $user->is_disabled
+                : null,
+            'disabled_at' => Schema::hasColumn('users', 'disabled_at')
+                ? $user->disabled_at?->toISOString()
+                : null,
+            'suspended_until' => Schema::hasColumn('users', 'suspended_until')
+                ? $user->suspended_until?->toISOString()
+                : null,
+            'suspended_reason' => Schema::hasColumn('users', 'suspended_reason')
+                ? $user->suspended_reason
+                : null,
+            'updated_at' => $user->updated_at?->toISOString(),
         ];
     }
 
@@ -604,6 +947,26 @@ class ReportController extends Controller
             'total' => $paginator->total(),
             'last_page' => $paginator->lastPage(),
         ];
+    }
+
+    private function userAccountStatusColumn(): string
+    {
+        return Schema::hasColumn('users', 'status') ? 'status' : 'account_status';
+    }
+
+    private function userAccountStatus(User $user): string
+    {
+        $column = $this->userAccountStatusColumn();
+
+        return (string) ($user->{$column} ?? '');
+    }
+
+    private function isAdminUser(User $user): bool
+    {
+        $user->loadMissing('roles:id,code');
+
+        return $user->role === 'admin'
+            || $user->roles->contains(static fn ($role): bool => $role->code === 'admin');
     }
 
     private function deleteStoredEvidencePath(?string $path): void

@@ -406,6 +406,386 @@ class AdminReportStatusHistoryApiTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_disable_listing_from_listing_report(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createPostReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing', [
+                'admin_note' => 'Disabled after review.',
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Listing disabled.')
+            ->assertJsonPath('data.report.id', $report->id)
+            ->assertJsonPath('data.report.status', PostReport::STATUS_RESOLVED)
+            ->assertJsonPath('data.listing.id', $report->listing_id)
+            ->assertJsonPath('data.listing.listing_status', 'suspended')
+            ->assertJsonPath('data.listing.moderation_note', 'Disabled after review.')
+            ->assertJsonPath('data.history.status', PostReport::STATUS_RESOLVED)
+            ->assertJsonPath('data.history.changed_by', $admin->id)
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'data' => [
+                    'report',
+                    'listing' => [
+                        'id',
+                        'user_id',
+                        'title',
+                        'listing_status',
+                        'is_flagged',
+                        'moderation_note',
+                        'updated_at',
+                    ],
+                    'history',
+                ],
+                'trace_id',
+            ]);
+
+        $this->assertDatabaseHas('listings', [
+            'id' => $report->listing_id,
+            'listing_status' => 'suspended',
+            'moderation_note' => 'Disabled after review.',
+        ]);
+        $this->assertDatabaseHas('post_reports', [
+            'id' => $report->id,
+            'status' => PostReport::STATUS_RESOLVED,
+        ]);
+    }
+
+    public function test_non_admin_cannot_disable_listing_from_listing_report(): void
+    {
+        $user = $this->createUser();
+        $report = $this->createPostReport();
+        $token = $this->createAccessToken($user, ['user']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing', [
+                'admin_note' => 'Should not be allowed.',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Forbidden.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertDatabaseHas('listings', [
+            'id' => $report->listing_id,
+            'listing_status' => 'available',
+        ]);
+        $this->assertDatabaseHas('post_reports', [
+            'id' => $report->id,
+            'status' => PostReport::STATUS_SUBMITTED,
+        ]);
+    }
+
+    public function test_disabling_listing_without_new_note_keeps_existing_moderation_note(): void
+    {
+        $admin = $this->createAdminUser();
+        $listing = $this->createListing([
+            'moderation_note' => 'Existing note.',
+        ]);
+        $report = $this->createPostReport([
+            'listing' => $listing,
+        ]);
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing')
+            ->assertOk()
+            ->assertJsonPath('data.listing.moderation_note', 'Existing note.');
+
+        $this->assertDatabaseHas('listings', [
+            'id' => $listing->id,
+            'listing_status' => 'suspended',
+            'moderation_note' => 'Existing note.',
+        ]);
+    }
+
+    public function test_disabling_listing_writes_activity_log(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createPostReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing', [
+                'admin_note' => 'Removed after confirmation.',
+            ])
+            ->assertOk();
+
+        $activityLog = ActivityLog::query()
+            ->where('action_type', 'listing.disabled')
+            ->where('subject_type', (new Listing)->getMorphClass())
+            ->where('subject_id', $report->listing_id)
+            ->first();
+
+        $this->assertNotNull($activityLog);
+        $this->assertSame($admin->id, (int) $activityLog->actor_user_id);
+        $this->assertSame('Listing disabled.', $activityLog->description);
+        $this->assertSame($report->id, (int) $activityLog->metadata['report_id']);
+        $this->assertSame($report->listing_id, (int) $activityLog->metadata['listing_id']);
+        $this->assertSame('available', $activityLog->metadata['listing_status_from']);
+        $this->assertSame('suspended', $activityLog->metadata['listing_status_to']);
+        $this->assertSame(PostReport::STATUS_SUBMITTED, $activityLog->metadata['report_status_from']);
+        $this->assertSame(PostReport::STATUS_RESOLVED, $activityLog->metadata['report_status_to']);
+        $this->assertSame('disable_listing', $activityLog->metadata['moderation_action']);
+        $this->assertSame('Removed after confirmation.', $activityLog->metadata['admin_note']);
+    }
+
+    public function test_disabling_listing_auto_resolves_report_and_creates_history_row(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createPostReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing', [
+                'admin_note' => 'Resolved by disabling the listing.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.history.status', PostReport::STATUS_RESOLVED);
+
+        $this->assertDatabaseHas('post_report_status_histories', [
+            'post_report_id' => $report->id,
+            'status' => PostReport::STATUS_RESOLVED,
+            'admin_note' => 'Resolved by disabling the listing.',
+            'changed_by' => $admin->id,
+        ]);
+    }
+
+    public function test_repeated_disable_listing_is_rejected_safely(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createPostReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing', [
+                'admin_note' => 'First disable.',
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/listings/'.$report->id.'/disable-listing', [
+                'admin_note' => 'Second disable.',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonPath('errors.listing.0', 'The listing is already disabled.')
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertSame(1, ActivityLog::query()
+            ->where('action_type', 'listing.disabled')
+            ->where('subject_id', $report->listing_id)
+            ->count());
+        $this->assertSame(1, \App\Models\PostReportStatusHistory::query()
+            ->where('post_report_id', $report->id)
+            ->count());
+    }
+
+    public function test_admin_can_suspend_user_from_user_report(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createUserReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'Suspended for repeated abuse.',
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'User suspended.')
+            ->assertJsonPath('data.report.id', $report->id)
+            ->assertJsonPath('data.report.status', UserReport::STATUS_RESOLVED)
+            ->assertJsonPath('data.user.id', $report->reported_user_id)
+            ->assertJsonPath('data.user.status', 'suspended')
+            ->assertJsonPath('data.history.status', UserReport::STATUS_RESOLVED)
+            ->assertJsonPath('data.history.changed_by', $admin->id)
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'data' => [
+                    'report',
+                    'user' => [
+                        'id',
+                        'full_name',
+                        'status',
+                        'is_disabled',
+                        'disabled_at',
+                        'suspended_until',
+                        'suspended_reason',
+                        'updated_at',
+                    ],
+                    'history',
+                ],
+                'trace_id',
+            ]);
+
+        if (Schema::hasColumn('users', 'is_disabled')) {
+            $response->assertJsonPath('data.user.is_disabled', true);
+        }
+
+        if (Schema::hasColumn('users', 'suspended_reason')) {
+            $response->assertJsonPath('data.user.suspended_reason', 'Suspended for repeated abuse.');
+        }
+
+        $this->assertDatabaseHas('user_reports', [
+            'id' => $report->id,
+            'status' => UserReport::STATUS_RESOLVED,
+        ]);
+        $this->assertUserHasSuspendedState(
+            User::query()->findOrFail($report->reported_user_id),
+            'Suspended for repeated abuse.'
+        );
+    }
+
+    public function test_non_admin_cannot_suspend_user_from_user_report(): void
+    {
+        $user = $this->createUser();
+        $report = $this->createUserReport();
+        $token = $this->createAccessToken($user, ['user']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'Should not be allowed.',
+            ])
+            ->assertStatus(403)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Forbidden.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertUserRemainsActive(
+            User::query()->findOrFail($report->reported_user_id)
+        );
+        $this->assertDatabaseHas('user_reports', [
+            'id' => $report->id,
+            'status' => UserReport::STATUS_SUBMITTED,
+        ]);
+    }
+
+    public function test_suspending_user_writes_activity_log(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createUserReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'Escalated harassment case.',
+            ])
+            ->assertOk();
+
+        $activityLog = ActivityLog::query()
+            ->where('action_type', 'user.suspended')
+            ->where('subject_type', (new User)->getMorphClass())
+            ->where('subject_id', $report->reported_user_id)
+            ->first();
+
+        $this->assertNotNull($activityLog);
+        $this->assertSame($admin->id, (int) $activityLog->actor_user_id);
+        $this->assertSame('User suspended.', $activityLog->description);
+        $this->assertSame($report->id, (int) $activityLog->metadata['report_id']);
+        $this->assertSame($report->reported_user_id, (int) $activityLog->metadata['reported_user_id']);
+        $this->assertSame('active', $activityLog->metadata['account_status_from']);
+        $this->assertSame('suspended', $activityLog->metadata['account_status_to']);
+        $this->assertFalse((bool) $activityLog->metadata['is_disabled_from']);
+        $this->assertTrue((bool) $activityLog->metadata['is_disabled_to']);
+        $this->assertSame(UserReport::STATUS_SUBMITTED, $activityLog->metadata['report_status_from']);
+        $this->assertSame(UserReport::STATUS_RESOLVED, $activityLog->metadata['report_status_to']);
+        $this->assertSame('suspend_user', $activityLog->metadata['moderation_action']);
+        $this->assertSame('Escalated harassment case.', $activityLog->metadata['admin_note']);
+    }
+
+    public function test_suspending_user_auto_resolves_report_and_creates_history_row(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createUserReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'Resolved by suspending the user.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.history.status', UserReport::STATUS_RESOLVED);
+
+        $this->assertDatabaseHas('user_report_status_histories', [
+            'user_report_id' => $report->id,
+            'status' => UserReport::STATUS_RESOLVED,
+            'admin_note' => 'Resolved by suspending the user.',
+            'changed_by' => $admin->id,
+        ]);
+    }
+
+    public function test_repeated_suspend_user_is_rejected_safely(): void
+    {
+        $admin = $this->createAdminUser();
+        $report = $this->createUserReport();
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'First suspension.',
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'Second suspension.',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonPath('errors.user.0', 'The user is already suspended.')
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertSame(1, ActivityLog::query()
+            ->where('action_type', 'user.suspended')
+            ->where('subject_id', $report->reported_user_id)
+            ->count());
+        $this->assertSame(1, \App\Models\UserReportStatusHistory::query()
+            ->where('user_report_id', $report->id)
+            ->count());
+    }
+
+    public function test_suspending_admin_target_is_rejected_and_leaves_report_unchanged(): void
+    {
+        $admin = $this->createAdminUser();
+        $adminTarget = $this->createAdminUser();
+        $report = $this->createUserReport([
+            'user' => $adminTarget,
+        ]);
+        $token = $this->createAccessToken($admin, ['admin']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/admin/reports/users/'.$report->id.'/suspend-user', [
+                'admin_note' => 'Attempted admin suspension.',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonPath('errors.user.0', 'Admin accounts cannot be suspended from report moderation.')
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertUserRemainsActive($adminTarget);
+        $this->assertDatabaseHas('user_reports', [
+            'id' => $report->id,
+            'status' => UserReport::STATUS_SUBMITTED,
+        ]);
+        $this->assertDatabaseCount('activity_logs', 0);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
@@ -416,6 +796,46 @@ class AdminReportStatusHistoryApiTest extends TestCase
             'reason_category' => 'spam',
             'description' => 'This should be reviewed.',
         ], $overrides);
+    }
+
+    private function assertUserHasSuspendedState(User $user, ?string $expectedReason = null): void
+    {
+        $user->refresh();
+        $statusColumn = Schema::hasColumn('users', 'status') ? 'status' : 'account_status';
+
+        $this->assertSame('suspended', (string) $user->{$statusColumn});
+
+        if (Schema::hasColumn('users', 'is_disabled')) {
+            $this->assertTrue((bool) $user->is_disabled);
+        }
+
+        if (Schema::hasColumn('users', 'disabled_at')) {
+            $this->assertNotNull($user->disabled_at);
+        }
+
+        if (Schema::hasColumn('users', 'suspended_until')) {
+            $this->assertNull($user->suspended_until);
+        }
+
+        if ($expectedReason !== null && Schema::hasColumn('users', 'suspended_reason')) {
+            $this->assertSame($expectedReason, (string) $user->suspended_reason);
+        }
+    }
+
+    private function assertUserRemainsActive(User $user): void
+    {
+        $user->refresh();
+        $statusColumn = Schema::hasColumn('users', 'status') ? 'status' : 'account_status';
+
+        $this->assertSame('active', (string) $user->{$statusColumn});
+
+        if (Schema::hasColumn('users', 'is_disabled')) {
+            $this->assertFalse((bool) $user->is_disabled);
+        }
+
+        if (Schema::hasColumn('users', 'disabled_at')) {
+            $this->assertNull($user->disabled_at);
+        }
     }
 
     private function createAdminUser(): User
