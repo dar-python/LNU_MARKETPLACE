@@ -11,6 +11,15 @@ class Inquiry extends Model
     use HasFactory;
 
     /**
+     * @var list<string>
+     */
+    public const PREFERRED_CONTACT_METHODS = [
+        'in_app',
+        'email',
+        'phone',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -21,6 +30,7 @@ class Inquiry extends Model
         'recipient_user_id',
         'subject',
         'message',
+        'preferred_contact_method',
         'inquiry_status',
         'responded_at',
         'response_note',
@@ -34,6 +44,7 @@ class Inquiry extends Model
     protected function casts(): array
     {
         return [
+            'preferred_contact_method' => 'string',
             'inquiry_status' => 'string',
             'responded_at' => 'datetime',
         ];
