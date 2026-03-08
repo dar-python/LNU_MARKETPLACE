@@ -11,6 +11,36 @@ class ModerationReport extends Model
 {
     use HasFactory;
 
+    public const TARGET_TYPE_LISTING = 'listing';
+
+    public const TARGET_TYPE_USER = 'user';
+
+    /**
+     * @var list<string>
+     */
+    public const TARGET_TYPES = [
+        self::TARGET_TYPE_LISTING,
+        self::TARGET_TYPE_USER,
+    ];
+
+    public const STATUS_PENDING = 'pending';
+
+    public const PRIORITY_MEDIUM = 'medium';
+
+    public const RESOLUTION_ACTION_NONE = 'none';
+
+    /**
+     * @var list<string>
+     */
+    public const REPORT_CATEGORIES = [
+        'spam',
+        'fraud',
+        'prohibited_item',
+        'harassment',
+        'fake_listing',
+        'other',
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -48,6 +78,13 @@ class ModerationReport extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::deleting(function (ModerationReport $report): void {
+            $report->evidence()->get()->each->delete();
+        });
+    }
+
     public function reporter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reporter_user_id');
@@ -73,4 +110,3 @@ class ModerationReport extends Model
         return $this->hasMany(ReportEvidence::class);
     }
 }
-
