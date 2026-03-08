@@ -11,7 +11,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ListingController extends Controller
@@ -209,15 +208,12 @@ class ListingController extends Controller
         }
 
         DB::transaction(function () use ($listing): void {
-            $images = $listing->listingImages()->get(['id', 'image_path']);
+            $images = $listing->listingImages()->get(['id', 'listing_id', 'image_path']);
 
             foreach ($images as $image) {
-                if (is_string($image->image_path) && $image->image_path !== '') {
-                    Storage::disk('public')->delete($image->image_path);
-                }
+                $image->delete();
             }
 
-            $listing->listingImages()->delete();
             $listing->delete();
         });
 

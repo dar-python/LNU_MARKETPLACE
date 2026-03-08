@@ -41,5 +41,6 @@ Route::prefix('v1')->group(function (): void {
             'destroy',
         ]);
         Route::post('/listings/{listing}/images', [ListingImageController::class, 'store']);
+        Route::delete('/listings/{listing}/images/{image}', [ListingImageController::class, 'destroy']);
     });
 });
