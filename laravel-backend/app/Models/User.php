@@ -160,24 +160,24 @@ class User extends Authenticatable
         return $this->hasMany(Inquiry::class, 'decided_by');
     }
 
-    public function moderationReportsFiled(): HasMany
+    public function postReportsFiled(): HasMany
     {
-        return $this->hasMany(ModerationReport::class, 'reporter_user_id');
+        return $this->hasMany(PostReport::class, 'reporter_user_id');
     }
 
-    public function moderationReportsAssigned(): HasMany
+    public function userReportsFiled(): HasMany
     {
-        return $this->hasMany(ModerationReport::class, 'assigned_admin_user_id');
+        return $this->hasMany(UserReport::class, 'reporter_user_id');
+    }
+
+    public function userReportsReceived(): HasMany
+    {
+        return $this->hasMany(UserReport::class, 'reported_user_id');
     }
 
     public function moderationReportsAsTargetUser(): HasMany
     {
-        return $this->hasMany(ModerationReport::class, 'target_user_id');
-    }
-
-    public function reportEvidenceUploads(): HasMany
-    {
-        return $this->hasMany(ReportEvidence::class, 'uploaded_by_user_id');
+        return $this->userReportsReceived();
     }
 
     public function activityLogs(): HasMany

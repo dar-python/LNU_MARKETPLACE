@@ -45,9 +45,11 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::prefix('reports')->group(function (): void {
             Route::post('/listings/{listing}', [ReportController::class, 'storeListing']);
+            Route::get('/mine/listings', [ReportController::class, 'mineListings']);
+            Route::get('/listings/{postReport}', [ReportController::class, 'showListing']);
             Route::post('/users/{user}', [ReportController::class, 'storeUser']);
-            Route::get('/mine', [ReportController::class, 'mine']);
-            Route::get('/{report}', [ReportController::class, 'show']);
+            Route::get('/mine/users', [ReportController::class, 'mineUsers']);
+            Route::get('/users/{userReport}', [ReportController::class, 'showUser']);
         });
         Route::apiResource('listings', ListingController::class)->only([
             'store',

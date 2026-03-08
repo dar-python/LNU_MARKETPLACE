@@ -101,10 +101,14 @@ class Listing extends Model
         return $this->hasMany(Inquiry::class);
     }
 
+    public function postReports(): HasMany
+    {
+        return $this->hasMany(PostReport::class, 'listing_id');
+    }
+
     public function moderationReports(): HasMany
     {
-        return $this->hasMany(ModerationReport::class, 'target_listing_id')
-            ->where('target_type', 'listing');
+        return $this->postReports();
     }
 }
 
