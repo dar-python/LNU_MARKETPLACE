@@ -74,7 +74,7 @@ class ListingImagesApiTest extends TestCase
         $storedImage = ListingImage::query()->where('listing_id', $listing->id)->latest('id')->first();
         $this->assertNotNull($storedImage);
         $this->assertSame('listings/'.$listing->id, dirname($storedImage->image_path));
-        Storage::disk('public')->assertExists($storedImage->image_path);
+        $this->assertTrue(Storage::disk('public')->exists($storedImage->image_path));
     }
 
     public function test_upload_listing_image_requires_authentication(): void
@@ -238,7 +238,7 @@ class ListingImagesApiTest extends TestCase
             ->assertJsonStructure(['trace_id']);
 
         $this->assertDatabaseMissing('listing_images', ['id' => $image->id]);
-        Storage::disk('public')->assertMissing($path);
+        $this->assertFalse(Storage::disk('public')->exists($path));
     }
 
     public function test_deleting_listing_cleans_up_listing_images_from_storage(): void
@@ -265,7 +265,7 @@ class ListingImagesApiTest extends TestCase
 
         $this->assertContains($deleteResponse->status(), [200, 204]);
         $this->assertDatabaseMissing('listing_images', ['id' => $image->id]);
-        Storage::disk('public')->assertMissing($path);
+        $this->assertFalse(Storage::disk('public')->exists($path));
     }
 
     private function createListing(User $owner): Listing
