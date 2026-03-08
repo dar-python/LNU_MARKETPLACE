@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\FavoriteController;
+use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\ListingController;
 use App\Http\Controllers\Api\V1\ListingImageController;
 use Illuminate\Support\Facades\Route;
@@ -40,6 +41,7 @@ Route::prefix('v1')->group(function (): void {
             'update',
             'destroy',
         ]);
+        Route::patch('/inquiries/{inquiry}/decision', [InquiryController::class, 'decide']);
         Route::post('/listings/{listing}/images', [ListingImageController::class, 'store']);
         Route::delete('/listings/{listing}/images/{image}', [ListingImageController::class, 'destroy']);
     });
