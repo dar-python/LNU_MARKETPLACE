@@ -5,11 +5,11 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Listing;
-use App\Models\ModerationReport;
-use App\Models\ReportEvidence;
+use App\Models\PostReport;
 use App\Models\Role;
 use App\Models\StudentIdPrefix;
 use App\Models\User;
+use App\Models\UserReport;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
@@ -59,7 +59,7 @@ class ReportsApiTest extends TestCase
 
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/reports/listings/'.$listing->id, $this->reportPayload([
-                'report_category' => 'fraud',
+                'reason_category' => 'scam',
                 'description' => 'This listing looks deceptive.',
             ]));
 
@@ -67,30 +67,26 @@ class ReportsApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('success', true)
             ->assertJsonPath('message', 'Report submitted.')
+            ->assertJsonPath('data.report.type', 'listing')
+            ->assertJsonPath('data.report.listing_id', $listing->id)
             ->assertJsonPath('data.report.reporter_user_id', $reporter->id)
-            ->assertJsonPath('data.report.target_type', ModerationReport::TARGET_TYPE_LISTING)
-            ->assertJsonPath('data.report.target_listing_id', $listing->id)
-            ->assertJsonPath('data.report.report_category', 'fraud')
+            ->assertJsonPath('data.report.reason_category', 'scam')
             ->assertJsonPath('data.report.description', 'This listing looks deceptive.')
-            ->assertJsonPath('data.report.status', ModerationReport::STATUS_PENDING)
+            ->assertJsonPath('data.report.status', PostReport::STATUS_SUBMITTED)
             ->assertJsonStructure([
                 'success',
                 'message',
                 'data' => [
                     'report' => [
                         'id',
+                        'type',
+                        'listing_id',
                         'reporter_user_id',
-                        'target_type',
-                        'target_listing_id',
-                        'target_user_id',
-                        'report_category',
+                        'reason_category',
                         'description',
                         'status',
-                        'priority',
-                        'resolution_action',
+                        'evidence_path',
                         'listing' => ['id', 'user_id', 'title', 'listing_status'],
-                        'user',
-                        'evidence',
                     ],
                 ],
                 'trace_id',
@@ -98,15 +94,13 @@ class ReportsApiTest extends TestCase
 
         $reportId = (int) $response->json('data.report.id');
 
-        $this->assertDatabaseHas('moderation_reports', [
+        $this->assertDatabaseHas('post_reports', [
             'id' => $reportId,
+            'listing_id' => $listing->id,
             'reporter_user_id' => $reporter->id,
-            'target_type' => ModerationReport::TARGET_TYPE_LISTING,
-            'target_listing_id' => $listing->id,
-            'target_user_id' => null,
-            'report_category' => 'fraud',
+            'reason_category' => 'scam',
             'description' => 'This listing looks deceptive.',
-            'status' => ModerationReport::STATUS_PENDING,
+            'status' => PostReport::STATUS_SUBMITTED,
         ]);
 
         $activityLog = ActivityLog::query()
@@ -116,7 +110,7 @@ class ReportsApiTest extends TestCase
 
         $this->assertNotNull($activityLog);
         $this->assertSame($reporter->id, (int) $activityLog->actor_user_id);
-        $this->assertSame((new ModerationReport)->getMorphClass(), $activityLog->subject_type);
+        $this->assertSame((new PostReport)->getMorphClass(), $activityLog->subject_type);
         $this->assertSame('Report submitted.', $activityLog->description);
     }
 
@@ -128,25 +122,23 @@ class ReportsApiTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/reports/users/'.$target->id, $this->reportPayload([
-                'report_category' => 'harassment',
+                'reason_category' => 'harassment',
                 'description' => 'The user sent abusive messages.',
             ]))
             ->assertCreated()
             ->assertJsonPath('success', true)
             ->assertJsonPath('message', 'Report submitted.')
-            ->assertJsonPath('data.report.target_type', ModerationReport::TARGET_TYPE_USER)
-            ->assertJsonPath('data.report.target_listing_id', null)
-            ->assertJsonPath('data.report.target_user_id', $target->id)
+            ->assertJsonPath('data.report.type', 'user')
+            ->assertJsonPath('data.report.reported_user_id', $target->id)
             ->assertJsonPath('data.report.user.id', $target->id)
             ->assertJsonStructure(['trace_id']);
 
-        $this->assertDatabaseHas('moderation_reports', [
+        $this->assertDatabaseHas('user_reports', [
             'reporter_user_id' => $reporter->id,
-            'target_type' => ModerationReport::TARGET_TYPE_USER,
-            'target_user_id' => $target->id,
-            'target_listing_id' => null,
-            'report_category' => 'harassment',
+            'reported_user_id' => $target->id,
+            'reason_category' => 'harassment',
             'description' => 'The user sent abusive messages.',
+            'status' => UserReport::STATUS_SUBMITTED,
         ]);
     }
 
@@ -164,7 +156,7 @@ class ReportsApiTest extends TestCase
             ->assertJsonPath('errors.listing.0', 'You cannot report your own listing.')
             ->assertJsonStructure(['trace_id']);
 
-        $this->assertDatabaseCount('moderation_reports', 0);
+        $this->assertDatabaseCount('post_reports', 0);
     }
 
     public function test_user_cannot_report_self(): void
@@ -180,10 +172,10 @@ class ReportsApiTest extends TestCase
             ->assertJsonPath('errors.user.0', 'You cannot report your own account.')
             ->assertJsonStructure(['trace_id']);
 
-        $this->assertDatabaseCount('moderation_reports', 0);
+        $this->assertDatabaseCount('user_reports', 0);
     }
 
-    public function test_report_category_is_required_when_submitting_a_report(): void
+    public function test_reason_category_is_required_when_submitting_a_report(): void
     {
         $reporter = $this->createUser();
         $owner = $this->createUser();
@@ -198,14 +190,14 @@ class ReportsApiTest extends TestCase
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Validation failed.')
             ->assertJsonStructure([
-                'errors' => ['report_category'],
+                'errors' => ['reason_category'],
                 'trace_id',
             ]);
 
-        $this->assertDatabaseCount('moderation_reports', 0);
+        $this->assertDatabaseCount('post_reports', 0);
     }
 
-    public function test_report_category_must_be_valid_when_submitting_a_report(): void
+    public function test_reason_category_must_be_valid_when_submitting_a_report(): void
     {
         $reporter = $this->createUser();
         $owner = $this->createUser();
@@ -214,17 +206,17 @@ class ReportsApiTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/reports/listings/'.$listing->id, $this->reportPayload([
-                'report_category' => 'scam',
+                'reason_category' => 'not_allowed',
             ]))
             ->assertStatus(422)
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Validation failed.')
             ->assertJsonStructure([
-                'errors' => ['report_category'],
+                'errors' => ['reason_category'],
                 'trace_id',
             ]);
 
-        $this->assertDatabaseCount('moderation_reports', 0);
+        $this->assertDatabaseCount('post_reports', 0);
     }
 
     public function test_description_is_required_when_submitting_a_report(): void
@@ -236,7 +228,7 @@ class ReportsApiTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/reports/listings/'.$listing->id, [
-                'report_category' => 'spam',
+                'reason_category' => 'spam',
                 'description' => '   ',
             ])
             ->assertStatus(422)
@@ -247,7 +239,7 @@ class ReportsApiTest extends TestCase
                 'trace_id',
             ]);
 
-        $this->assertDatabaseCount('moderation_reports', 0);
+        $this->assertDatabaseCount('post_reports', 0);
     }
 
     public function test_evidence_upload_succeeds_for_a_valid_image(): void
@@ -272,20 +264,18 @@ class ReportsApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('success', true)
             ->assertJsonPath('message', 'Report submitted.')
-            ->assertJsonPath('data.report.evidence.mime_type', 'image/jpeg')
-            ->assertJsonPath('data.report.evidence.uploaded_by_user_id', $reporter->id)
             ->assertJsonStructure(['trace_id']);
 
         $reportId = (int) $response->json('data.report.id');
-        $storedPath = (string) $response->json('data.report.evidence.file_path');
+        $storedPath = (string) $response->json('data.report.evidence_path');
 
-        $this->assertSame('reports/'.$reportId, dirname($storedPath));
+        $this->assertSame('post-reports/'.$reportId, dirname($storedPath));
         $this->assertTrue(Storage::disk('public')->exists($storedPath));
-        $this->assertDatabaseHas('report_evidence', [
-            'moderation_report_id' => $reportId,
-            'uploaded_by_user_id' => $reporter->id,
-            'file_path' => $storedPath,
-            'mime_type' => 'image/jpeg',
+        $this->assertDatabaseHas('post_reports', [
+            'id' => $reportId,
+            'reporter_user_id' => $reporter->id,
+            'listing_id' => $listing->id,
+            'evidence_path' => $storedPath,
         ]);
     }
 
@@ -312,7 +302,7 @@ class ReportsApiTest extends TestCase
                 'trace_id',
             ]);
 
-        $this->assertDatabaseCount('report_evidence', 0);
+        $this->assertDatabaseCount('post_reports', 0);
     }
 
     public function test_oversized_evidence_is_rejected(): void
@@ -338,29 +328,27 @@ class ReportsApiTest extends TestCase
                 'trace_id',
             ]);
 
-        $this->assertDatabaseCount('report_evidence', 0);
+        $this->assertDatabaseCount('post_reports', 0);
     }
 
-    public function test_submitted_report_appears_in_mine_endpoint(): void
+    public function test_submitted_listing_report_appears_in_mine_listings_endpoint(): void
     {
         $reporter = $this->createUser();
         $otherReporter = $this->createUser();
-        $firstReport = $this->createReport([
+        $firstReport = $this->createPostReport([
             'reporter' => $reporter,
         ]);
-        $secondReport = $this->createReport([
+        $secondReport = $this->createPostReport([
             'reporter' => $reporter,
-            'target_type' => ModerationReport::TARGET_TYPE_USER,
-            'user' => $this->createUser(),
-            'report_category' => 'harassment',
+            'reason_category' => 'prohibited_item',
         ]);
-        $this->createReport([
+        $this->createPostReport([
             'reporter' => $otherReporter,
         ]);
         $token = $reporter->createToken('test-token')->plainTextToken;
 
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
-            ->getJson('/api/v1/reports/mine');
+            ->getJson('/api/v1/reports/mine/listings');
 
         $response
             ->assertOk()
@@ -382,29 +370,94 @@ class ReportsApiTest extends TestCase
         $this->assertSame($expectedIds, $ids);
     }
 
-    public function test_reporter_can_view_own_report_detail(): void
+    public function test_submitted_user_report_appears_in_mine_users_endpoint(): void
     {
         $reporter = $this->createUser();
-        $targetUser = $this->createUser();
-        $report = $this->createReport([
+        $otherReporter = $this->createUser();
+        $firstReport = $this->createUserReport([
             'reporter' => $reporter,
-            'target_type' => ModerationReport::TARGET_TYPE_USER,
-            'user' => $targetUser,
-            'report_category' => 'other',
-            'description' => 'Detail check.',
+            'user' => $this->createUser(),
+            'reason_category' => 'other',
+        ]);
+        $secondReport = $this->createUserReport([
+            'reporter' => $reporter,
+            'user' => $this->createUser(),
+            'reason_category' => 'harassment',
+        ]);
+        $this->createUserReport([
+            'reporter' => $otherReporter,
+            'user' => $this->createUser(),
+        ]);
+        $token = $reporter->createToken('test-token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/v1/reports/mine/users');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Reports retrieved successfully.')
+            ->assertJsonPath('data.meta.total', 2)
+            ->assertJsonCount(2, 'data.reports')
+            ->assertJsonStructure(['trace_id']);
+
+        $ids = array_map('intval', array_column($response->json('data.reports'), 'id'));
+        sort($ids);
+
+        $expectedIds = [$firstReport->id, $secondReport->id];
+        sort($expectedIds);
+
+        $this->assertSame($expectedIds, $ids);
+    }
+
+    public function test_reporter_can_view_own_listing_report_detail(): void
+    {
+        $reporter = $this->createUser();
+        $owner = $this->createUser();
+        $listing = $this->createListing(['owner' => $owner]);
+        $report = $this->createPostReport([
+            'reporter' => $reporter,
+            'listing' => $listing,
+            'reason_category' => 'spam',
+            'description' => 'Listing detail check.',
         ]);
         $token = $reporter->createToken('test-token')->plainTextToken;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->getJson('/api/v1/reports/'.$report->id)
+            ->getJson('/api/v1/reports/listings/'.$report->id)
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('message', 'Report retrieved successfully.')
             ->assertJsonPath('data.report.id', $report->id)
-            ->assertJsonPath('data.report.target_type', ModerationReport::TARGET_TYPE_USER)
-            ->assertJsonPath('data.report.target_user_id', $targetUser->id)
+            ->assertJsonPath('data.report.type', 'listing')
+            ->assertJsonPath('data.report.listing_id', $listing->id)
+            ->assertJsonPath('data.report.listing.id', $listing->id)
+            ->assertJsonPath('data.report.description', 'Listing detail check.')
+            ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_reporter_can_view_own_user_report_detail(): void
+    {
+        $reporter = $this->createUser();
+        $targetUser = $this->createUser();
+        $report = $this->createUserReport([
+            'reporter' => $reporter,
+            'user' => $targetUser,
+            'reason_category' => 'other',
+            'description' => 'User detail check.',
+        ]);
+        $token = $reporter->createToken('test-token')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/v1/reports/users/'.$report->id)
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Report retrieved successfully.')
+            ->assertJsonPath('data.report.id', $report->id)
+            ->assertJsonPath('data.report.type', 'user')
+            ->assertJsonPath('data.report.reported_user_id', $targetUser->id)
             ->assertJsonPath('data.report.user.id', $targetUser->id)
-            ->assertJsonPath('data.report.description', 'Detail check.')
+            ->assertJsonPath('data.report.description', 'User detail check.')
             ->assertJsonStructure(['trace_id']);
     }
 
@@ -412,13 +465,13 @@ class ReportsApiTest extends TestCase
     {
         $reporter = $this->createUser();
         $outsider = $this->createUser();
-        $report = $this->createReport([
+        $report = $this->createPostReport([
             'reporter' => $reporter,
         ]);
         $token = $outsider->createToken('test-token')->plainTextToken;
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->getJson('/api/v1/reports/'.$report->id)
+            ->getJson('/api/v1/reports/listings/'.$report->id)
             ->assertStatus(403)
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Forbidden.')
@@ -434,7 +487,7 @@ class ReportsApiTest extends TestCase
 
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/v1/reports/users/'.$targetUser->id, $this->reportPayload([
-                'report_category' => 'spam',
+                'reason_category' => 'spam',
                 'description' => 'Envelope check.',
             ]));
 
@@ -448,15 +501,13 @@ class ReportsApiTest extends TestCase
                 'data' => [
                     'report' => [
                         'id',
+                        'type',
+                        'reported_user_id',
                         'reporter_user_id',
-                        'target_type',
-                        'target_listing_id',
-                        'target_user_id',
-                        'report_category',
+                        'reason_category',
                         'description',
                         'status',
-                        'priority',
-                        'resolution_action',
+                        'evidence_path',
                         'created_at',
                         'updated_at',
                     ],
@@ -478,7 +529,7 @@ class ReportsApiTest extends TestCase
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->post('/api/v1/reports/listings/'.$listing->id, [
                 ...$this->reportPayload([
-                    'report_category' => 'spam',
+                    'reason_category' => 'spam',
                     'description' => 'Path check.',
                 ]),
                 'evidence' => $image,
@@ -487,11 +538,11 @@ class ReportsApiTest extends TestCase
         $response->assertCreated();
 
         $reportId = (int) $response->json('data.report.id');
-        $evidence = ReportEvidence::query()->where('moderation_report_id', $reportId)->firstOrFail();
+        $report = PostReport::query()->findOrFail($reportId);
 
-        $this->assertSame('reports/'.$reportId, dirname($evidence->file_path));
-        $this->assertSame($evidence->file_path, $response->json('data.report.evidence.file_path'));
-        $this->assertTrue(Storage::disk('public')->exists($evidence->file_path));
+        $this->assertSame('post-reports/'.$reportId, dirname((string) $report->evidence_path));
+        $this->assertSame($report->evidence_path, $response->json('data.report.evidence_path'));
+        $this->assertTrue(Storage::disk('public')->exists((string) $report->evidence_path));
     }
 
     public function test_deleting_a_report_cleans_up_its_evidence_file(): void
@@ -515,15 +566,14 @@ class ReportsApiTest extends TestCase
         $response->assertCreated();
 
         $reportId = (int) $response->json('data.report.id');
-        $evidencePath = (string) $response->json('data.report.evidence.file_path');
-        $report = ModerationReport::query()->findOrFail($reportId);
+        $evidencePath = (string) $response->json('data.report.evidence_path');
+        $report = PostReport::query()->findOrFail($reportId);
 
         $this->assertTrue(Storage::disk('public')->exists($evidencePath));
 
         $report->delete();
 
-        $this->assertDatabaseMissing('moderation_reports', ['id' => $reportId]);
-        $this->assertDatabaseMissing('report_evidence', ['moderation_report_id' => $reportId]);
+        $this->assertDatabaseMissing('post_reports', ['id' => $reportId]);
         $this->assertFalse(Storage::disk('public')->exists($evidencePath));
     }
 
@@ -534,7 +584,7 @@ class ReportsApiTest extends TestCase
     private function reportPayload(array $overrides = []): array
     {
         return array_merge([
-            'report_category' => 'spam',
+            'reason_category' => 'spam',
             'description' => 'This should be reviewed.',
         ], $overrides);
     }
@@ -624,33 +674,38 @@ class ReportsApiTest extends TestCase
     /**
      * @param  array<string, mixed>  $overrides
      */
-    private function createReport(array $overrides = []): ModerationReport
+    private function createPostReport(array $overrides = []): PostReport
     {
         $reporter = $overrides['reporter'] ?? $this->createUser();
-        $targetType = $overrides['target_type'] ?? ModerationReport::TARGET_TYPE_LISTING;
+        $targetListing = $overrides['listing'] ?? $this->createListing();
 
-        if ($targetType === ModerationReport::TARGET_TYPE_USER) {
-            $targetUser = $overrides['user'] ?? $this->createUser();
-            $targetListingId = null;
-            $targetUserId = $targetUser->id;
-        } else {
-            $targetListing = $overrides['listing'] ?? $this->createListing();
-            $targetListingId = $targetListing->id;
-            $targetUserId = null;
-        }
+        unset($overrides['reporter'], $overrides['listing']);
 
-        unset($overrides['reporter'], $overrides['listing'], $overrides['user']);
-
-        return ModerationReport::query()->create(array_merge([
+        return PostReport::query()->create(array_merge([
+            'listing_id' => $targetListing->id,
             'reporter_user_id' => $reporter->id,
-            'target_type' => $targetType,
-            'target_listing_id' => $targetListingId,
-            'target_user_id' => $targetUserId,
-            'report_category' => 'spam',
+            'reason_category' => 'spam',
             'description' => 'Generated report.',
-            'status' => ModerationReport::STATUS_PENDING,
-            'priority' => ModerationReport::PRIORITY_MEDIUM,
-            'resolution_action' => ModerationReport::RESOLUTION_ACTION_NONE,
+            'status' => PostReport::STATUS_SUBMITTED,
+        ], $overrides));
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function createUserReport(array $overrides = []): UserReport
+    {
+        $reporter = $overrides['reporter'] ?? $this->createUser();
+        $targetUser = $overrides['user'] ?? $this->createUser();
+
+        unset($overrides['reporter'], $overrides['user']);
+
+        return UserReport::query()->create(array_merge([
+            'reported_user_id' => $targetUser->id,
+            'reporter_user_id' => $reporter->id,
+            'reason_category' => 'spam',
+            'description' => 'Generated user report.',
+            'status' => UserReport::STATUS_SUBMITTED,
         ], $overrides));
     }
 }
