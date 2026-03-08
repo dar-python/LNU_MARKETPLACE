@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Category;
 use App\Models\Inquiry;
 use App\Models\Listing;
@@ -79,6 +80,7 @@ class InquiryDecisionApiTest extends TestCase
             ->assertJsonPath('data.inquiry.id', $inquiry->id)
             ->assertJsonPath('data.inquiry.status', Inquiry::STATUS_ACCEPTED)
             ->assertJsonPath('data.inquiry.decided_by', $seller->id)
+            ->assertJsonPath('data.inquiry.listing.listing_status', 'reserved')
             ->assertJsonStructure([
                 'data' => [
                     'inquiry' => [
@@ -99,6 +101,10 @@ class InquiryDecisionApiTest extends TestCase
             'status' => Inquiry::STATUS_ACCEPTED,
             'decided_by' => $seller->id,
             'inquiry_status' => 'resolved',
+        ]);
+        $this->assertDatabaseHas('listings', [
+            'id' => $listing->id,
+            'listing_status' => 'reserved',
         ]);
         $this->assertNotNull($response->json('data.inquiry.decided_at'));
         $this->assertNotNull($inquiry->fresh()->responded_at);
@@ -121,6 +127,7 @@ class InquiryDecisionApiTest extends TestCase
             ->assertJsonPath('message', 'Inquiry declined.')
             ->assertJsonPath('data.inquiry.status', Inquiry::STATUS_DECLINED)
             ->assertJsonPath('data.inquiry.decided_by', $seller->id)
+            ->assertJsonPath('data.inquiry.listing.listing_status', 'available')
             ->assertJsonStructure(['trace_id']);
 
         $this->assertDatabaseHas('inquiries', [
@@ -128,6 +135,10 @@ class InquiryDecisionApiTest extends TestCase
             'status' => Inquiry::STATUS_DECLINED,
             'decided_by' => $seller->id,
             'inquiry_status' => 'closed',
+        ]);
+        $this->assertDatabaseHas('listings', [
+            'id' => $listing->id,
+            'listing_status' => 'available',
         ]);
     }
 
@@ -196,6 +207,74 @@ class InquiryDecisionApiTest extends TestCase
         $this->assertSame(Inquiry::STATUS_ACCEPTED, $inquiry->status);
         $this->assertSame($seller->id, $inquiry->decided_by);
         $this->assertNotNull($inquiry->decided_at);
+    }
+
+    public function test_accepting_an_inquiry_writes_an_activity_log(): void
+    {
+        $seller = $this->createUser();
+        $buyer = $this->createUser();
+        $listing = $this->createListing(['owner' => $seller]);
+        $inquiry = $this->createInquiry($buyer, $listing);
+        $token = $seller->createToken('seller-token')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->patchJson('/api/v1/inquiries/'.$inquiry->id.'/decision', [
+                'status' => Inquiry::STATUS_ACCEPTED,
+            ])
+            ->assertOk();
+
+        $activityLog = ActivityLog::query()
+            ->where('action_type', 'inquiry.accepted')
+            ->where('subject_id', $inquiry->id)
+            ->first();
+
+        $this->assertNotNull($activityLog);
+        $this->assertSame($seller->id, (int) $activityLog->actor_user_id);
+        $this->assertSame((new Inquiry())->getMorphClass(), $activityLog->subject_type);
+        $this->assertSame($inquiry->id, (int) $activityLog->subject_id);
+        $this->assertSame('Inquiry accepted.', $activityLog->description);
+        $this->assertEquals([
+            'inquiry_id' => $inquiry->id,
+            'listing_id' => $listing->id,
+            'inquiry_status_from' => Inquiry::STATUS_PENDING,
+            'inquiry_status_to' => Inquiry::STATUS_ACCEPTED,
+            'listing_status_from' => 'available',
+            'listing_status_to' => 'reserved',
+        ], $activityLog->metadata);
+    }
+
+    public function test_declining_an_inquiry_writes_an_activity_log(): void
+    {
+        $seller = $this->createUser();
+        $buyer = $this->createUser();
+        $listing = $this->createListing(['owner' => $seller]);
+        $inquiry = $this->createInquiry($buyer, $listing);
+        $token = $seller->createToken('seller-token')->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->patchJson('/api/v1/inquiries/'.$inquiry->id.'/decision', [
+                'status' => Inquiry::STATUS_DECLINED,
+            ])
+            ->assertOk();
+
+        $activityLog = ActivityLog::query()
+            ->where('action_type', 'inquiry.declined')
+            ->where('subject_id', $inquiry->id)
+            ->first();
+
+        $this->assertNotNull($activityLog);
+        $this->assertSame($seller->id, (int) $activityLog->actor_user_id);
+        $this->assertSame((new Inquiry())->getMorphClass(), $activityLog->subject_type);
+        $this->assertSame($inquiry->id, (int) $activityLog->subject_id);
+        $this->assertSame('Inquiry declined.', $activityLog->description);
+        $this->assertEquals([
+            'inquiry_id' => $inquiry->id,
+            'listing_id' => $listing->id,
+            'inquiry_status_from' => Inquiry::STATUS_PENDING,
+            'inquiry_status_to' => Inquiry::STATUS_DECLINED,
+            'listing_status_from' => 'available',
+            'listing_status_to' => 'available',
+        ], $activityLog->metadata);
     }
 
     public function test_accepted_inquiry_cannot_be_decided_again(): void

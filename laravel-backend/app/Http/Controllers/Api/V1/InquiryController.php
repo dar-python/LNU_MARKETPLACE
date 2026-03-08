@@ -7,12 +7,15 @@ use App\Http\Requests\DecideInquiryRequest;
 use App\Http\Requests\InquiryIndexRequest;
 use App\Http\Requests\ShowInquiryRequest;
 use App\Http\Requests\StoreInquiryRequest;
+use App\Models\ActivityLog;
 use App\Models\Inquiry;
 use App\Models\Listing;
 use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
@@ -26,6 +29,8 @@ class InquiryController extends Controller
         'reserved',
         'sold',
     ];
+
+    private const RESERVED_LISTING_STATUS = 'reserved';
 
     public function store(StoreInquiryRequest $request, Listing $listing): JsonResponse
     {
@@ -125,22 +130,55 @@ class InquiryController extends Controller
     public function decide(DecideInquiryRequest $request, Inquiry $inquiry): JsonResponse
     {
         if (! $inquiry->isPending()) {
-            return ApiResponse::error('Only pending inquiries can be decided.', [
-                'status' => ['The inquiry has already been decided.'],
-            ], 422);
+            return $this->pendingDecisionError();
         }
 
         $status = (string) $request->validated('status');
         $decidedAt = now();
 
-        $inquiry->fill([
-            'status' => $status,
-            'decided_at' => $decidedAt,
-            'decided_by' => (int) $request->user()->id,
-            'inquiry_status' => $this->legacyInquiryStatus($status),
-            'responded_at' => $decidedAt,
-        ]);
-        $inquiry->save();
+        DB::transaction(function () use ($request, $inquiry, $status, $decidedAt): void {
+            $lockedInquiry = Inquiry::query()
+                ->lockForUpdate()
+                ->findOrFail($inquiry->id);
+
+            if (! $lockedInquiry->isPending()) {
+                throw new HttpResponseException($this->pendingDecisionError());
+            }
+
+            $listing = Listing::query()
+                ->lockForUpdate()
+                ->findOrFail($lockedInquiry->listing_id);
+
+            $listingStatusBeforeDecision = (string) $listing->listing_status;
+            $listingStatusAfterDecision = $listingStatusBeforeDecision;
+
+            $lockedInquiry->fill([
+                'status' => $status,
+                'decided_at' => $decidedAt,
+                'decided_by' => (int) $request->user()->id,
+                'inquiry_status' => $this->legacyInquiryStatus($status),
+                'responded_at' => $decidedAt,
+            ]);
+            $lockedInquiry->save();
+
+            if ($status === Inquiry::STATUS_ACCEPTED) {
+                $listingStatusAfterDecision = self::RESERVED_LISTING_STATUS;
+
+                if ($listing->listing_status !== self::RESERVED_LISTING_STATUS) {
+                    $listing->forceFill([
+                        'listing_status' => self::RESERVED_LISTING_STATUS,
+                    ])->save();
+                }
+            }
+
+            $this->logDecisionActivity(
+                $request,
+                $lockedInquiry,
+                $status,
+                $listingStatusBeforeDecision,
+                $listingStatusAfterDecision
+            );
+        });
 
         return ApiResponse::success($this->decisionMessage($status), [
             'inquiry' => $this->serializeInquiry(
@@ -191,9 +229,44 @@ class InquiryController extends Controller
             : 'Inquiry declined.';
     }
 
+    private function pendingDecisionError(): JsonResponse
+    {
+        return ApiResponse::error('Only pending inquiries can be decided.', [
+            'status' => ['The inquiry has already been decided.'],
+        ], 422);
+    }
+
     private function legacyInquiryStatus(string $status): string
     {
         return $status === Inquiry::STATUS_ACCEPTED ? 'resolved' : 'closed';
+    }
+
+    private function logDecisionActivity(
+        DecideInquiryRequest $request,
+        Inquiry $inquiry,
+        string $status,
+        string $listingStatusBeforeDecision,
+        string $listingStatusAfterDecision
+    ): void {
+        ActivityLog::query()->create([
+            'actor_user_id' => $request->user()?->id,
+            'action_type' => $status === Inquiry::STATUS_ACCEPTED
+                ? 'inquiry.accepted'
+                : 'inquiry.declined',
+            'subject_type' => $inquiry->getMorphClass(),
+            'subject_id' => $inquiry->id,
+            'description' => $this->decisionMessage($status),
+            'metadata' => [
+                'inquiry_id' => $inquiry->id,
+                'listing_id' => (int) $inquiry->listing_id,
+                'inquiry_status_from' => Inquiry::STATUS_PENDING,
+                'inquiry_status_to' => $status,
+                'listing_status_from' => $listingStatusBeforeDecision,
+                'listing_status_to' => $listingStatusAfterDecision,
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 512),
+        ]);
     }
 
     /**
