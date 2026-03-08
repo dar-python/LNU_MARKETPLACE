@@ -25,6 +25,15 @@ class Inquiry extends Model
     ];
 
     /**
+     * @var list<string>
+     */
+    public const PREFERRED_CONTACT_METHODS = [
+        'in_app',
+        'email',
+        'phone',
+    ];
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -35,6 +44,7 @@ class Inquiry extends Model
         'recipient_user_id',
         'subject',
         'message',
+        'preferred_contact_method',
         'status',
         'decided_at',
         'decided_by',
@@ -51,6 +61,7 @@ class Inquiry extends Model
     protected function casts(): array
     {
         return [
+            'preferred_contact_method' => 'string',
             'status' => 'string',
             'decided_at' => 'datetime',
             'decided_by' => 'integer',
@@ -93,4 +104,3 @@ class Inquiry extends Model
             && $userId === (int) $listingOwnerId;
     }
 }
-

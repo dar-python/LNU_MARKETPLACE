@@ -36,6 +36,12 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/favorites', [FavoriteController::class, 'index']);
         Route::post('/favorites', [FavoriteController::class, 'store']);
         Route::delete('/favorites/{listing}', [FavoriteController::class, 'destroy']);
+        Route::post('/listings/{listing}/inquiries', [InquiryController::class, 'store']);
+        Route::prefix('inquiries')->group(function (): void {
+            Route::get('/sent', [InquiryController::class, 'sent']);
+            Route::get('/received', [InquiryController::class, 'received']);
+            Route::get('/{inquiry}', [InquiryController::class, 'show']);
+        });
         Route::apiResource('listings', ListingController::class)->only([
             'store',
             'update',
