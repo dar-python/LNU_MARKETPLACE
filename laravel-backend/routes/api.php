@@ -55,8 +55,10 @@ Route::prefix('v1')->group(function (): void {
             Route::prefix('reports')->group(function (): void {
                 Route::get('/listings/{postReport}/history', [ReportController::class, 'listingHistory']);
                 Route::patch('/listings/{postReport}/status', [ReportController::class, 'updateListingStatus']);
+                Route::post('/listings/{postReport}/disable-listing', [ReportController::class, 'disableListing']);
                 Route::get('/users/{userReport}/history', [ReportController::class, 'userHistory']);
                 Route::patch('/users/{userReport}/status', [ReportController::class, 'updateUserStatus']);
+                Route::post('/users/{userReport}/suspend-user', [ReportController::class, 'suspendUser']);
             });
         });
         Route::apiResource('listings', ListingController::class)->only([
