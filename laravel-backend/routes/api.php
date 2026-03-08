@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\FavoriteController;
 use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\ListingController;
 use App\Http\Controllers\Api\V1\ListingImageController;
+use App\Http\Controllers\Api\V1\ReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/ping', fn () => response()->json([
@@ -41,6 +42,12 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/sent', [InquiryController::class, 'sent']);
             Route::get('/received', [InquiryController::class, 'received']);
             Route::get('/{inquiry}', [InquiryController::class, 'show']);
+        });
+        Route::prefix('reports')->group(function (): void {
+            Route::post('/listings/{listing}', [ReportController::class, 'storeListing']);
+            Route::post('/users/{user}', [ReportController::class, 'storeUser']);
+            Route::get('/mine', [ReportController::class, 'mine']);
+            Route::get('/{report}', [ReportController::class, 'show']);
         });
         Route::apiResource('listings', ListingController::class)->only([
             'store',
