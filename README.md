@@ -1,4 +1,4 @@
-# LNU Marketplace Monorepo
+# LNU Marketplace
 
 This repository contains:
 

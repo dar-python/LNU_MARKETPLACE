@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Requests\StoreListingImageRequest;
 use App\Models\Category;
 use App\Models\Listing;
 use App\Models\ListingImage;
@@ -58,7 +59,6 @@ class ListingImagesApiTest extends TestCase
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->post('/api/v1/listings/'.$listing->id.'/images', [
                 'image' => $image,
-                'images' => [$image],
             ]);
 
         $response
@@ -73,7 +73,8 @@ class ListingImagesApiTest extends TestCase
 
         $storedImage = ListingImage::query()->where('listing_id', $listing->id)->latest('id')->first();
         $this->assertNotNull($storedImage);
-        Storage::disk('public')->assertExists($storedImage->image_path);
+        $this->assertSame('listings/'.$listing->id, dirname($storedImage->image_path));
+        $this->assertTrue(Storage::disk('public')->exists($storedImage->image_path));
     }
 
     public function test_upload_listing_image_requires_authentication(): void
@@ -86,7 +87,6 @@ class ListingImagesApiTest extends TestCase
 
         $this->post('/api/v1/listings/'.$listing->id.'/images', [
             'image' => $image,
-            'images' => [$image],
         ])
             ->assertStatus(401)
             ->assertJsonPath('success', false)
@@ -108,7 +108,6 @@ class ListingImagesApiTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->post('/api/v1/listings/'.$listing->id.'/images', [
                 'image' => $image,
-                'images' => [$image],
             ])
             ->assertStatus(403)
             ->assertJsonPath('success', false)
@@ -121,11 +120,30 @@ class ListingImagesApiTest extends TestCase
             'uploaded_by_user_id' => $nonOwner->id,
         ]);
     }
-    public function test_upload_invalid_file_type_or_oversize_returns_validation_error(): void
+    public function test_upload_to_missing_listing_returns_not_found_response(): void
     {
         Storage::fake('public');
 
         $owner = $this->createUser('2307102');
+        $token = $owner->createToken('test-token')->plainTextToken;
+        $image = UploadedFile::fake()->image('listing.jpg', 800, 800)->size(512);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/api/v1/listings/999999/images', [
+                'image' => $image,
+            ])
+            ->assertNotFound()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Resource not found.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_upload_invalid_file_type_returns_validation_error(): void
+    {
+        Storage::fake('public');
+
+        $owner = $this->createUser('2307107');
         $listing = $this->createListing($owner);
         $token = $owner->createToken('test-token')->plainTextToken;
 
@@ -133,23 +151,94 @@ class ListingImagesApiTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->post('/api/v1/listings/'.$listing->id.'/images', [
                 'image' => $invalidMime,
-                'images' => [$invalidMime],
             ])
             ->assertStatus(422)
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Validation failed.')
-            ->assertJsonStructure(['trace_id']);
+            ->assertJsonStructure(['errors' => ['image'], 'trace_id']);
+    }
+
+    public function test_upload_oversized_image_returns_validation_error(): void
+    {
+        Storage::fake('public');
+
+        $owner = $this->createUser('2307108');
+        $listing = $this->createListing($owner);
+        $token = $owner->createToken('test-token')->plainTextToken;
 
         $oversized = UploadedFile::fake()->image('oversized.jpg', 2000, 2000)->size(12000);
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->post('/api/v1/listings/'.$listing->id.'/images', [
                 'image' => $oversized,
-                'images' => [$oversized],
             ])
             ->assertStatus(422)
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Validation failed.')
             ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_upload_rejects_when_listing_has_reached_maximum_images(): void
+    {
+        Storage::fake('public');
+
+        $owner = $this->createUser('2307109');
+        $listing = $this->createListing($owner);
+        $token = $owner->createToken('test-token')->plainTextToken;
+
+        for ($sortOrder = 0; $sortOrder < StoreListingImageRequest::MAX_IMAGES_PER_LISTING; $sortOrder++) {
+            $path = 'listings/'.$listing->id.'/seed-'.$sortOrder.'.jpg';
+            Storage::disk('public')->put($path, 'image-content-'.$sortOrder);
+
+            ListingImage::query()->create([
+                'listing_id' => $listing->id,
+                'image_path' => $path,
+                'sort_order' => $sortOrder,
+                'is_primary' => $sortOrder === 0,
+                'uploaded_by_user_id' => $owner->id,
+            ]);
+        }
+
+        $image = UploadedFile::fake()->image('listing.jpg', 800, 800)->size(512);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/api/v1/listings/'.$listing->id.'/images', [
+                'image' => $image,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure(['errors' => ['image'], 'trace_id']);
+    }
+
+    public function test_deleting_listing_image_removes_file_from_storage(): void
+    {
+        Storage::fake('public');
+
+        $owner = $this->createUser('2307110');
+        $listing = $this->createListing($owner);
+        $token = $owner->createToken('test-token')->plainTextToken;
+
+        $path = 'listings/'.$listing->id.'/seed-image.jpg';
+        Storage::disk('public')->put($path, 'image-content');
+
+        $image = ListingImage::query()->create([
+            'listing_id' => $listing->id,
+            'image_path' => $path,
+            'sort_order' => 0,
+            'is_primary' => true,
+            'uploaded_by_user_id' => $owner->id,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->deleteJson('/api/v1/listings/'.$listing->id.'/images/'.$image->id)
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Listing image deleted.')
+            ->assertJsonPath('data', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertDatabaseMissing('listing_images', ['id' => $image->id]);
+        $this->assertFalse(Storage::disk('public')->exists($path));
     }
 
     public function test_deleting_listing_cleans_up_listing_images_from_storage(): void
@@ -176,7 +265,7 @@ class ListingImagesApiTest extends TestCase
 
         $this->assertContains($deleteResponse->status(), [200, 204]);
         $this->assertDatabaseMissing('listing_images', ['id' => $image->id]);
-        Storage::disk('public')->assertMissing($path);
+        $this->assertFalse(Storage::disk('public')->exists($path));
     }
 
     private function createListing(User $owner): Listing
@@ -238,9 +327,10 @@ class ListingImagesApiTest extends TestCase
     private function skipIfListingImageRoutesMissing(): void
     {
         $hasImageUploadRoute = $this->hasRouteMatching('POST', '#^/api/v1/listings/\{[^/]+\}/images$#');
+        $hasImageDeleteRoute = $this->hasRouteMatching('DELETE', '#^/api/v1/listings/\{[^/]+\}/images/\{[^/]+\}$#');
         $hasListingDeleteRoute = $this->hasRouteMatching('DELETE', '#^/api/v1/listings/\{[^/]+\}$#');
 
-        if ($hasImageUploadRoute && $hasListingDeleteRoute) {
+        if ($hasImageUploadRoute && $hasImageDeleteRoute && $hasListingDeleteRoute) {
             return;
         }
 

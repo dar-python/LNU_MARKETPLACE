@@ -47,6 +47,8 @@ Route::prefix('v1')->group(function (): void {
             'update',
             'destroy',
         ]);
+        Route::patch('/inquiries/{inquiry}/decision', [InquiryController::class, 'decide']);
         Route::post('/listings/{listing}/images', [ListingImageController::class, 'store']);
+        Route::delete('/listings/{listing}/images/{image}', [ListingImageController::class, 'destroy']);
     });
 });
