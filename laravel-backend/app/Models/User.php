@@ -155,6 +155,11 @@ class User extends Authenticatable
         return $this->hasMany(Inquiry::class, 'recipient_user_id');
     }
 
+    public function decidedInquiries(): HasMany
+    {
+        return $this->hasMany(Inquiry::class, 'decided_by');
+    }
+
     public function moderationReportsFiled(): HasMany
     {
         return $this->hasMany(ModerationReport::class, 'reporter_user_id');
