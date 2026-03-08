@@ -6,15 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ReportIndexRequest;
 use App\Http\Requests\ShowReportRequest;
 use App\Http\Requests\StoreReportRequest;
+use App\Http\Requests\UpdateReportStatusRequest;
 use App\Models\ActivityLog;
 use App\Models\Listing;
 use App\Models\PostReport;
+use App\Models\PostReportStatusHistory;
 use App\Models\User;
 use App\Models\UserReport;
+use App\Models\UserReportStatusHistory;
 use App\Support\ApiResponse;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -136,6 +140,56 @@ class ReportController extends Controller
         ]);
     }
 
+    public function listingHistory(Request $request, PostReport $postReport): JsonResponse
+    {
+        return ApiResponse::success('Report history retrieved successfully.', [
+            'history' => $postReport->statusHistories()
+                ->with('changedBy:id,first_name,middle_name,last_name')
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (PostReportStatusHistory $history): array => $this->serializePostReportStatusHistory($history))
+                ->all(),
+        ]);
+    }
+
+    public function userHistory(Request $request, UserReport $userReport): JsonResponse
+    {
+        return ApiResponse::success('Report history retrieved successfully.', [
+            'history' => $userReport->statusHistories()
+                ->with('changedBy:id,first_name,middle_name,last_name')
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (UserReportStatusHistory $history): array => $this->serializeUserReportStatusHistory($history))
+                ->all(),
+        ]);
+    }
+
+    public function updateListingStatus(UpdateReportStatusRequest $request, PostReport $postReport): JsonResponse
+    {
+        [$report, $history] = $this->changeListingReportStatus($request, $postReport);
+
+        return ApiResponse::success('Report status updated.', [
+            'report' => $this->serializePostReport(
+                $this->postReportQuery()->whereKey($report->id)->firstOrFail()
+            ),
+            'history' => $this->serializePostReportStatusHistory($history),
+        ]);
+    }
+
+    public function updateUserStatus(UpdateReportStatusRequest $request, UserReport $userReport): JsonResponse
+    {
+        [$report, $history] = $this->changeUserReportStatus($request, $userReport);
+
+        return ApiResponse::success('Report status updated.', [
+            'report' => $this->serializeUserReport(
+                $this->userReportQuery()->whereKey($report->id)->firstOrFail()
+            ),
+            'history' => $this->serializeUserReportStatusHistory($history),
+        ]);
+    }
+
     private function createListingReport(StoreReportRequest $request, Listing $listing): PostReport
     {
         $validated = $request->validated();
@@ -152,6 +206,8 @@ class ReportController extends Controller
                     'description' => (string) $validated['description'],
                     'status' => PostReport::STATUS_SUBMITTED,
                 ]);
+
+                $this->recordPostReportHistory($report, PostReport::STATUS_SUBMITTED);
 
                 if ($evidence instanceof UploadedFile) {
                     $storedPath = $evidence->store('post-reports/'.$report->id, 'public');
@@ -192,6 +248,8 @@ class ReportController extends Controller
                     'description' => (string) $validated['description'],
                     'status' => UserReport::STATUS_SUBMITTED,
                 ]);
+
+                $this->recordUserReportHistory($report, UserReport::STATUS_SUBMITTED);
 
                 if ($evidence instanceof UploadedFile) {
                     $storedPath = $evidence->store('user-reports/'.$report->id, 'public');
@@ -256,6 +314,140 @@ class ReportController extends Controller
         return $query;
     }
 
+    /**
+     * @return array{0: PostReport, 1: PostReportStatusHistory}
+     */
+    private function changeListingReportStatus(UpdateReportStatusRequest $request, PostReport $postReport): array
+    {
+        $validated = $request->validated();
+        $status = (string) $validated['status'];
+        $adminNote = $validated['admin_note'] ?? null;
+
+        $report = null;
+        $history = null;
+
+        DB::transaction(function () use ($request, $postReport, $status, $adminNote, &$report, &$history): void {
+            $report = PostReport::query()
+                ->whereKey($postReport->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $previousStatus = (string) $report->status;
+
+            if ($previousStatus === $status) {
+                throw ValidationException::withMessages([
+                    'status' => ['The report already has this status.'],
+                ]);
+            }
+
+            $report->forceFill([
+                'status' => $status,
+            ])->save();
+
+            $history = $this->recordPostReportHistory(
+                $report,
+                $status,
+                is_string($adminNote) ? $adminNote : null,
+                $request->user()?->id
+            );
+
+            $this->logStatusChangeActivity(
+                $request,
+                $report,
+                'listing',
+                $previousStatus,
+                $status,
+                is_string($adminNote) ? $adminNote : null
+            );
+        });
+
+        if (! $report instanceof PostReport || ! $history instanceof PostReportStatusHistory) {
+            throw new \RuntimeException('Unable to update listing report status.');
+        }
+
+        return [$report, $history->loadMissing('changedBy:id,first_name,middle_name,last_name')];
+    }
+
+    /**
+     * @return array{0: UserReport, 1: UserReportStatusHistory}
+     */
+    private function changeUserReportStatus(UpdateReportStatusRequest $request, UserReport $userReport): array
+    {
+        $validated = $request->validated();
+        $status = (string) $validated['status'];
+        $adminNote = $validated['admin_note'] ?? null;
+
+        $report = null;
+        $history = null;
+
+        DB::transaction(function () use ($request, $userReport, $status, $adminNote, &$report, &$history): void {
+            $report = UserReport::query()
+                ->whereKey($userReport->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $previousStatus = (string) $report->status;
+
+            if ($previousStatus === $status) {
+                throw ValidationException::withMessages([
+                    'status' => ['The report already has this status.'],
+                ]);
+            }
+
+            $report->forceFill([
+                'status' => $status,
+            ])->save();
+
+            $history = $this->recordUserReportHistory(
+                $report,
+                $status,
+                is_string($adminNote) ? $adminNote : null,
+                $request->user()?->id
+            );
+
+            $this->logStatusChangeActivity(
+                $request,
+                $report,
+                'user',
+                $previousStatus,
+                $status,
+                is_string($adminNote) ? $adminNote : null
+            );
+        });
+
+        if (! $report instanceof UserReport || ! $history instanceof UserReportStatusHistory) {
+            throw new \RuntimeException('Unable to update user report status.');
+        }
+
+        return [$report, $history->loadMissing('changedBy:id,first_name,middle_name,last_name')];
+    }
+
+    private function recordPostReportHistory(
+        PostReport $report,
+        string $status,
+        ?string $adminNote = null,
+        ?int $changedBy = null
+    ): PostReportStatusHistory {
+        return $report->statusHistories()->create([
+            'status' => $status,
+            'admin_note' => $adminNote,
+            'changed_by' => $changedBy,
+        ]);
+    }
+
+    private function recordUserReportHistory(
+        UserReport $report,
+        string $status,
+        ?string $adminNote = null,
+        ?int $changedBy = null
+    ): UserReportStatusHistory {
+        return $report->statusHistories()->create([
+            'status' => $status,
+            'admin_note' => $adminNote,
+            'changed_by' => $changedBy,
+        ]);
+    }
+
     private function logSubmissionActivity(
         StoreReportRequest $request,
         PostReport|UserReport $report,
@@ -275,6 +467,34 @@ class ReportController extends Controller
                 'reported_user_id' => $report instanceof UserReport ? (int) $report->reported_user_id : null,
                 'reason_category' => (string) $report->reason_category,
                 'has_evidence' => $hasEvidence,
+            ],
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 512),
+        ]);
+    }
+
+    private function logStatusChangeActivity(
+        Request $request,
+        PostReport|UserReport $report,
+        string $reportType,
+        string $previousStatus,
+        string $status,
+        ?string $adminNote
+    ): void {
+        ActivityLog::query()->create([
+            'actor_user_id' => $request->user()?->id,
+            'action_type' => 'report.status_changed',
+            'subject_type' => $report->getMorphClass(),
+            'subject_id' => $report->id,
+            'description' => 'Report status updated.',
+            'metadata' => [
+                'report_id' => $report->id,
+                'report_type' => $reportType,
+                'listing_id' => $report instanceof PostReport ? (int) $report->listing_id : null,
+                'reported_user_id' => $report instanceof UserReport ? (int) $report->reported_user_id : null,
+                'status_from' => $previousStatus,
+                'status_to' => $status,
+                'admin_note' => $adminNote,
             ],
             'ip_address' => $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 512),
@@ -323,6 +543,38 @@ class ReportController extends Controller
             'created_at' => $report->created_at?->toISOString(),
             'updated_at' => $report->updated_at?->toISOString(),
             'user' => $this->transformUser($report->reportedUser),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializePostReportStatusHistory(PostReportStatusHistory $history): array
+    {
+        return [
+            'id' => $history->id,
+            'status' => (string) $history->status,
+            'admin_note' => $history->admin_note,
+            'changed_by' => $history->changed_by !== null ? (int) $history->changed_by : null,
+            'changed_by_user' => $this->transformUser($history->changedBy),
+            'created_at' => $history->created_at?->toISOString(),
+            'updated_at' => $history->updated_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeUserReportStatusHistory(UserReportStatusHistory $history): array
+    {
+        return [
+            'id' => $history->id,
+            'status' => (string) $history->status,
+            'admin_note' => $history->admin_note,
+            'changed_by' => $history->changed_by !== null ? (int) $history->changed_by : null,
+            'changed_by_user' => $this->transformUser($history->changedBy),
+            'created_at' => $history->created_at?->toISOString(),
+            'updated_at' => $history->updated_at?->toISOString(),
         ];
     }
 

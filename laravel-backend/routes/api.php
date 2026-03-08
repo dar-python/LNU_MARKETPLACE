@@ -51,6 +51,14 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/mine/users', [ReportController::class, 'mineUsers']);
             Route::get('/users/{userReport}', [ReportController::class, 'showUser']);
         });
+        Route::prefix('admin')->middleware('admin')->group(function (): void {
+            Route::prefix('reports')->group(function (): void {
+                Route::get('/listings/{postReport}/history', [ReportController::class, 'listingHistory']);
+                Route::patch('/listings/{postReport}/status', [ReportController::class, 'updateListingStatus']);
+                Route::get('/users/{userReport}/history', [ReportController::class, 'userHistory']);
+                Route::patch('/users/{userReport}/status', [ReportController::class, 'updateUserStatus']);
+            });
+        });
         Route::apiResource('listings', ListingController::class)->only([
             'store',
             'update',
