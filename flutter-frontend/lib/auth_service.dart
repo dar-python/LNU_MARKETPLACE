@@ -16,6 +16,7 @@ class AuthService {
   final TokenStorage _tokenStorage = TokenStorage();
 
   bool _initialized = false;
+  bool _hasSessionToken = false;
   Map<String, dynamic>? _currentUser;
   Map<String, dynamic>? _lastPingBody;
   int? _lastPingStatusCode;
@@ -23,8 +24,10 @@ class AuthService {
   String? _lastResponseMessage;
   String? _lastAuthErrorCode;
   String? _lastAuthErrorIdentifier;
+  final Set<VoidCallback> _sessionResetCallbacks = <VoidCallback>{};
 
   bool get isLoggedIn => _currentUser != null;
+  bool get hasSession => _hasSessionToken;
   Map<String, dynamic>? get currentUser => _currentUser;
   Map<String, dynamic>? get lastPingBody => _lastPingBody;
   int? get lastPingStatusCode => _lastPingStatusCode;
@@ -34,6 +37,10 @@ class AuthService {
   String? get lastAuthErrorCode => _lastAuthErrorCode;
   String? get lastAuthErrorIdentifier => _lastAuthErrorIdentifier;
 
+  void registerSessionResetCallback(VoidCallback callback) {
+    _sessionResetCallbacks.add(callback);
+  }
+
   Future<void> init() async {
     if (_initialized) {
       return;
@@ -42,9 +49,11 @@ class AuthService {
 
     final token = await _tokenStorage.readToken();
     if (token == null || token.isEmpty) {
+      _hasSessionToken = false;
       return;
     }
 
+    _hasSessionToken = true;
     await refreshCurrentUser();
   }
 
@@ -58,13 +67,14 @@ class AuthService {
 
       _lastResponseMessage = _apiClient.extractMessage(response.data);
       _currentUser = _normalizeUser(rawUser);
+      _hasSessionToken = true;
       return null;
     } catch (error) {
       final message = _apiClient.mapError(error);
-      if (_apiClient.isUnauthorizedError(error)) {
-        await _tokenStorage.clearToken();
-        _currentUser = null;
+      if (await clearSessionIfUnauthorized(error)) {
+        return message;
       }
+
       return message;
     }
   }
@@ -153,6 +163,7 @@ class AuthService {
       await _tokenStorage.saveToken(token);
       _lastResponseMessage = _apiClient.extractMessage(response.data);
       _currentUser = _normalizeUser(rawUser);
+      _hasSessionToken = true;
 
       await pingBackend();
       return null;
@@ -279,14 +290,17 @@ class AuthService {
         debugPrint('Logout endpoint failed; clearing local session anyway.');
       }
     } finally {
-      await _tokenStorage.clearToken();
-      _currentUser = null;
-      _lastPingBody = null;
-      _lastPingStatusCode = null;
-      _lastPingError = null;
-      _lastAuthErrorCode = null;
-      _lastAuthErrorIdentifier = null;
+      await _clearLocalSession();
     }
+  }
+
+  Future<bool> clearSessionIfUnauthorized(Object error) async {
+    if (!_apiClient.isUnauthorizedError(error)) {
+      return false;
+    }
+
+    await _clearLocalSession();
+    return true;
   }
 
   Future<String?> pingBackend() async {
@@ -359,5 +373,21 @@ class AuthService {
     }
 
     return <String, dynamic>{'student_id': identifier, 'password': password};
+  }
+
+  Future<void> _clearLocalSession() async {
+    await _tokenStorage.clearToken();
+    _hasSessionToken = false;
+    _currentUser = null;
+    _lastPingBody = null;
+    _lastPingStatusCode = null;
+    _lastPingError = null;
+    _lastResponseMessage = null;
+    _lastAuthErrorCode = null;
+    _lastAuthErrorIdentifier = null;
+
+    for (final callback in _sessionResetCallbacks) {
+      callback();
+    }
   }
 }

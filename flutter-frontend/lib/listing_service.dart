@@ -20,6 +20,8 @@ class ListingCreateResult {
   bool get hasImageUploadErrors => imageUploadErrors.isNotEmpty;
 }
 
+typedef ListingCreateProgressCallback = void Function(String message);
+
 class ListingService {
   static final ListingService _instance = ListingService._internal();
 
@@ -29,9 +31,6 @@ class ListingService {
 
   final ApiClient _apiClient = ApiClient();
   final BackendListingAdapter _listingAdapter = BackendListingAdapter.instance;
-  final List<Listing> _draftListings = List<Listing>.from(dummyListings);
-
-  List<Listing> get listings => List<Listing>.unmodifiable(_draftListings);
 
   Future<ListingCollection> fetchBrowseListings({
     int page = 1,
@@ -53,10 +52,8 @@ class ListingService {
       adapter: _listingAdapter,
     );
 
-    return ListingCollection(
-      listings: _mergeDraftListings(remoteCollection.listings),
-      pagination: remoteCollection.pagination,
-    );
+    _listingAdapter.prime(remoteCollection.listings);
+    return remoteCollection;
   }
 
   Future<ListingDetail> fetchListingDetail(
@@ -79,6 +76,7 @@ class ListingService {
     required String description,
     List<File> imageFiles = const <File>[],
     String? campusLocation,
+    ListingCreateProgressCallback? onProgress,
   }) async {
     final normalizedTitle = title.trim();
     final normalizedDescription = description.trim();
@@ -94,10 +92,7 @@ class ListingService {
       throw const FormatException('Please enter a valid price.');
     }
 
-    final backendCategory = backendCategoryForFrontendLabel(category);
-    if (backendCategory == null) {
-      throw FormatException('Unable to map "$category" to a backend category.');
-    }
+    final backendCategory = resolveBackendCategoryForFrontendLabel(category);
 
     final fallbackListing = _buildDraftListing(
       id: 0,
@@ -110,6 +105,7 @@ class ListingService {
       imageFile: imageFiles.isNotEmpty ? imageFiles.first : null,
     );
 
+    onProgress?.call('Creating listing...');
     final response = await _apiClient.dio.post(
       '/api/v1/listings',
       data: <String, dynamic>{
@@ -143,13 +139,16 @@ class ListingService {
       category: backendCategory.name,
     );
 
-    _upsertDraftListing(resolvedListing);
     _listingAdapter.prime(<Listing>[resolvedListing]);
 
     final uploadedImages = <ListingImageAsset>[];
     final imageUploadErrors = <String>[];
 
-    for (final imageFile in imageFiles) {
+    for (var index = 0; index < imageFiles.length; index++) {
+      final imageFile = imageFiles[index];
+      onProgress?.call(
+        'Uploading image ${index + 1} of ${imageFiles.length}...',
+      );
       try {
         uploadedImages.add(
           await _uploadListingImage(
@@ -159,20 +158,22 @@ class ListingService {
         );
       } catch (error) {
         imageUploadErrors.add(
-          '${_safeFileName(imageFile)}: ${_apiClient.mapError(error)}',
+          '${_safeFileName(imageFile)}: ${_apiClient.mapError(error, maxMessages: 2)}',
         );
       }
     }
+
+    onProgress?.call(
+      imageUploadErrors.isEmpty
+          ? 'Listing posted successfully.'
+          : 'Listing created, but some image uploads failed.',
+    );
 
     return ListingCreateResult(
       listing: resolvedListing,
       uploadedImages: uploadedImages,
       imageUploadErrors: imageUploadErrors,
     );
-  }
-
-  void deleteListing(int id) {
-    _draftListings.removeWhere((listing) => listing.id == id);
   }
 
   Future<ListingImageAsset> _uploadListingImage({
@@ -252,31 +253,5 @@ class ListingService {
         .trim();
 
     return double.tryParse(normalizedValue);
-  }
-
-  void _upsertDraftListing(Listing listing) {
-    final existingIndex = _draftListings.indexWhere(
-      (existingListing) => existingListing.id == listing.id,
-    );
-
-    if (existingIndex >= 0) {
-      _draftListings[existingIndex] = listing;
-      return;
-    }
-
-    _draftListings.insert(0, listing);
-  }
-
-  List<Listing> _mergeDraftListings(List<Listing> remoteListings) {
-    if (_draftListings.isEmpty) {
-      return remoteListings;
-    }
-
-    final draftIds = _draftListings.map((listing) => listing.id).toSet();
-
-    return <Listing>[
-      ..._draftListings,
-      ...remoteListings.where((listing) => !draftIds.contains(listing.id)),
-    ];
   }
 }

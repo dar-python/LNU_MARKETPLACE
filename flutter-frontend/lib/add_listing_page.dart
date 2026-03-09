@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
 import 'listing_service.dart';
+import 'login_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
@@ -31,6 +32,7 @@ class _AddListingPageState extends State<AddListingPage> {
   List<File> _selectedImages = <File>[];
   bool _isLoading = false;
   String? _errorMessage;
+  String? _submissionStatusMessage;
 
   final List<String> _categories = <String>[
     'Gadgets',
@@ -81,7 +83,7 @@ class _AddListingPageState extends State<AddListingPage> {
   }
 
   Future<void> _submitListing() async {
-    if (!AuthService().isLoggedIn) {
+    if (!AuthService().hasSession) {
       setState(() => _errorMessage = 'Please log in to post a listing.');
       return;
     }
@@ -113,6 +115,7 @@ class _AddListingPageState extends State<AddListingPage> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _submissionStatusMessage = 'Creating listing...';
     });
 
     try {
@@ -123,43 +126,127 @@ class _AddListingPageState extends State<AddListingPage> {
         condition: _selectedCondition!,
         description: _descriptionController.text.trim(),
         imageFiles: _selectedImages,
+        onProgress: (message) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() => _submissionStatusMessage = message);
+        },
       );
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.hasImageUploadErrors
-                ? 'Listing posted, but ${result.imageUploadErrors.length} image upload'
-                      '${result.imageUploadErrors.length == 1 ? '' : 's'} failed.'
-                : 'Listing posted successfully!',
-          ),
-          backgroundColor: result.hasImageUploadErrors
-              ? Colors.orange
-              : Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-
+      await _showSubmissionResult(result);
+      if (!mounted) {
+        return;
+      }
       Navigator.pop(context, result.listing);
     } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
       if (!mounted) {
+        return;
+      }
+
+      if (sessionExpired) {
+        await _navigateToLogin();
         return;
       }
 
       setState(() {
         _errorMessage = error is FormatException
             ? error.message
-            : _apiClient.mapError(error);
+            : _apiClient.mapError(
+                error,
+                maxMessages: 4,
+                includeFieldNames: true,
+              );
       });
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _submissionStatusMessage = null;
+        });
       }
     }
+  }
+
+  Future<void> _showSubmissionResult(ListingCreateResult result) async {
+    if (!result.hasImageUploadErrors) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Listing posted successfully!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final uploadedCount = result.uploadedImages.length;
+    final failedCount = result.imageUploadErrors.length;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Listing Posted With Upload Issues',
+          style: TextStyle(
+            color: kNavy,
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                'Your listing was created successfully. '
+                '$uploadedCount image${uploadedCount == 1 ? '' : 's'} uploaded, '
+                '$failedCount failed.',
+                style: TextStyle(color: Colors.grey[700], fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              ...result.imageUploadErrors.map(
+                (error) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '- $error',
+                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kNavy,
+              foregroundColor: kWhite,
+              elevation: 0,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _navigateToLogin() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
   }
 
   String _normalizedPriceInput(String value) {
@@ -561,6 +648,46 @@ class _AddListingPageState extends State<AddListingPage> {
                                 style: TextStyle(
                                   color: Colors.red[600],
                                   fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (_submissionStatusMessage != null) ...<Widget>[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF8E1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFF5C518)),
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  kNavy,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _submissionStatusMessage!,
+                                style: const TextStyle(
+                                  color: kNavy,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
