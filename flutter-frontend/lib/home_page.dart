@@ -9,6 +9,7 @@ import 'listing_detail_page.dart';
 import 'listing_model_page.dart';
 import 'listing_service.dart';
 import 'login_page.dart';
+import 'my_listings_page.dart';
 import 'profile_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
@@ -30,8 +31,11 @@ class _HomePageState extends State<HomePage> {
 
   int _selectedIndex = 0;
   bool _isLoadingListings = true;
+  bool _isLoadingMyListings = false;
   String? _listingsErrorMessage;
+  String? _myListingsErrorMessage;
   List<Listing> _homeListings = <Listing>[];
+  List<Listing> _myListings = <Listing>[];
 
   final List<Map<String, dynamic>> _categories = <Map<String, dynamic>>[
     <String, dynamic>{'icon': Icons.menu_book_rounded, 'label': 'Books'},
@@ -70,6 +74,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadHomeListings();
+    _loadMyListings();
   }
 
   @override
@@ -115,6 +120,55 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _loadMyListings({bool showLoading = true}) async {
+    if (!AuthService().hasSession) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingMyListings = false;
+        _myListingsErrorMessage = null;
+        _myListings = <Listing>[];
+      });
+      return;
+    }
+
+    if (showLoading) {
+      setState(() {
+        _isLoadingMyListings = true;
+        _myListingsErrorMessage = null;
+      });
+    } else {
+      setState(() {
+        _myListingsErrorMessage = null;
+      });
+    }
+
+    try {
+      final collection = await _listingService.fetchMyListings(perPage: 4);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _myListings = collection.listings;
+        _isLoadingMyListings = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingMyListings = false;
+        _myListingsErrorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+    }
+  }
+
   Future<void> _openBrowsePage() async {
     await Navigator.push(
       context,
@@ -127,6 +181,19 @@ class _HomePageState extends State<HomePage> {
       context,
       MaterialPageRoute(builder: (_) => ListingDetailPage(listing: listing)),
     );
+  }
+
+  Future<void> _openMyListingsPage() async {
+    await _openAuthenticatedPage(const MyListingsPage());
+  }
+
+  Future<void> _openOwnerListing(Listing listing) async {
+    if (listing.isModerationApproved) {
+      await _openListing(listing);
+      return;
+    }
+
+    await _openMyListingsPage();
   }
 
   Future<void> _openAuthenticatedPage(Widget page) async {
@@ -152,7 +219,10 @@ class _HomePageState extends State<HomePage> {
             Expanded(
               child: RefreshIndicator(
                 color: kNavy,
-                onRefresh: () => _loadHomeListings(showLoading: false),
+                onRefresh: () async {
+                  await _loadHomeListings(showLoading: false);
+                  await _loadMyListings(showLoading: false);
+                },
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
@@ -163,6 +233,7 @@ class _HomePageState extends State<HomePage> {
                       _buildSearchBar(),
                       _buildHeroBanner(),
                       _buildCategories(),
+                      if (AuthService().hasSession) _buildMyListingsSection(),
                       if (_listingsErrorMessage != null &&
                           _homeListings.isNotEmpty) ...<Widget>[
                         Padding(
@@ -470,6 +541,82 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildMyListingsSection() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, left: 16, right: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              const Text(
+                'My Recent Posts',
+                style: TextStyle(
+                  color: kNavy,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                ),
+              ),
+              GestureDetector(
+                onTap: _openMyListingsPage,
+                child: const Text(
+                  'View All',
+                  style: TextStyle(
+                    color: kNavy,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_isLoadingMyListings && _myListings.isEmpty)
+            const SizedBox(
+              height: 170,
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                ),
+              ),
+            )
+          else if (_myListingsErrorMessage != null && _myListings.isEmpty)
+            _HomeStatusCard(
+              icon: Icons.cloud_off_rounded,
+              title: 'Unable to load your listings',
+              message: _myListingsErrorMessage!,
+              actionLabel: 'Retry',
+              onAction: _loadMyListings,
+            )
+          else if (_myListings.isEmpty)
+            const _SectionPlaceholder(
+              title: 'No posts yet.',
+              subtitle: 'Your own listings will appear here after you post.',
+            )
+          else
+            SizedBox(
+              height: 170,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: _myListings.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final listing = _myListings[index];
+                  return _MyListingCard(
+                    listing: listing,
+                    onTap: () => _openOwnerListing(listing),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeaturedSection() {
     return Padding(
       padding: const EdgeInsets.only(top: 24, left: 16, right: 16),
@@ -651,7 +798,11 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: kGold,
       foregroundColor: kNavy,
       elevation: 6,
-      onPressed: () => _openAuthenticatedPage(const AddListingPage()),
+      onPressed: () async {
+        await _openAuthenticatedPage(const AddListingPage());
+        await _loadHomeListings(showLoading: false);
+        await _loadMyListings(showLoading: false);
+      },
       child: const Icon(Icons.add_rounded, size: 28),
     );
   }
@@ -907,6 +1058,144 @@ class _FeaturedCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MyListingCard extends StatelessWidget {
+  const _MyListingCard({required this.listing, required this.onTap});
+
+  final Listing listing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: kWhite,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: listing.color,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    listing.icon,
+                    color: kNavy.withValues(alpha: 0.65),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        listing.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: kNavy,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        listing.price,
+                        style: const TextStyle(
+                          color: kNavy,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _MyListingBadge(listing: listing),
+            if (listing.isModerationDeclined &&
+                listing.adminNotePreview != null) ...<Widget>[
+              const SizedBox(height: 10),
+              Text(
+                listing.adminNotePreview!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.red[700],
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            ] else ...<Widget>[
+              const SizedBox(height: 10),
+              Text(
+                listing.itemStatusLabel,
+                style: TextStyle(color: Colors.grey[600], fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MyListingBadge extends StatelessWidget {
+  const _MyListingBadge({required this.listing});
+
+  final Listing listing;
+
+  @override
+  Widget build(BuildContext context) {
+    Color backgroundColor;
+    Color textColor;
+
+    if (listing.isModerationApproved) {
+      backgroundColor = const Color(0xFFE8F7EC);
+      textColor = const Color(0xFF138A36);
+    } else if (listing.isModerationDeclined) {
+      backgroundColor = const Color(0xFFFFE9E7);
+      textColor = const Color(0xFFB3261E);
+    } else {
+      backgroundColor = const Color(0xFFFFF5E1);
+      textColor = const Color(0xFFE08A00);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        listing.moderationLabel,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
