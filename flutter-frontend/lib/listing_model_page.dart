@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'config/app_config.dart';
+
 class Listing {
   final int id;
   final int userId;
@@ -149,6 +151,81 @@ class ListingPagination {
   }
 }
 
+class ListingDetail {
+  const ListingDetail({required this.listing, required this.images});
+
+  final Listing listing;
+  final List<ListingImageAsset> images;
+
+  factory ListingDetail.fromEnvelope(
+    dynamic body, {
+    BackendListingAdapter? adapter,
+    Listing? fallback,
+  }) {
+    final resolvedAdapter = adapter ?? BackendListingAdapter.instance;
+    final envelope = _mapValue(body);
+    if (envelope == null) {
+      throw const FormatException('Invalid response from server.');
+    }
+
+    final data = _mapValue(envelope['data']);
+    final rawListing = data == null ? null : _mapValue(data['listing']);
+    if (rawListing == null) {
+      throw const FormatException('Invalid listing detail payload.');
+    }
+
+    return ListingDetail.fromApi(
+      rawListing,
+      adapter: resolvedAdapter,
+      fallback: fallback,
+    );
+  }
+
+  factory ListingDetail.fromApi(
+    Map<String, dynamic> json, {
+    BackendListingAdapter? adapter,
+    Listing? fallback,
+  }) {
+    final resolvedAdapter = adapter ?? BackendListingAdapter.instance;
+    final images = _imageListValue(
+      json['images'],
+    ).map(ListingImageAsset.fromApi).toList();
+
+    return ListingDetail(
+      listing: resolvedAdapter.fromApi(json, fallback: fallback),
+      images: images,
+    );
+  }
+}
+
+class ListingImageAsset {
+  const ListingImageAsset({
+    required this.id,
+    required this.imagePath,
+    required this.imageUrl,
+    required this.sortOrder,
+    required this.isPrimary,
+  });
+
+  final int id;
+  final String imagePath;
+  final String imageUrl;
+  final int sortOrder;
+  final bool isPrimary;
+
+  factory ListingImageAsset.fromApi(Map<String, dynamic> json) {
+    final imagePath = _stringValue(json['image_path']);
+
+    return ListingImageAsset(
+      id: _parseListingId(json['id']),
+      imagePath: imagePath,
+      imageUrl: _publicImageUrl(imagePath),
+      sortOrder: _parseListingId(json['sort_order']),
+      isPrimary: json['is_primary'] == true,
+    );
+  }
+}
+
 class BackendListingAdapter {
   BackendListingAdapter._internal();
 
@@ -165,6 +242,10 @@ class BackendListingAdapter {
     final cached = id > 0 ? _cache[id] : null;
     final seed = fallback ?? cached;
     final resolvedCategory = _resolveCategory(json, seed);
+    final resolvedCondition = _conditionLabelFromApi(
+      json['item_condition'],
+      fallback: seed?.condition,
+    );
     final resolvedSeller = _resolveSeller(json, seed);
     final resolvedListing = Listing(
       id: id,
@@ -178,7 +259,7 @@ class BackendListingAdapter {
         fallback: seed?.listingStatus ?? '',
       ),
       campusLocation: _stringValue(
-        json['campus_location'],
+        json['campus_location'] ?? json['meetup_location'],
         fallback: seed?.campusLocation ?? '',
       ),
       title: _stringValue(
@@ -187,10 +268,7 @@ class BackendListingAdapter {
       ),
       price: _priceLabelFromApi(json['price'], fallback: seed?.price),
       category: resolvedCategory,
-      condition: _conditionLabelFromApi(
-        json['item_condition'],
-        fallback: seed?.condition,
-      ),
+      condition: resolvedCondition,
       description: _stringValue(
         json['description'],
         fallback: seed?.description ?? 'No description provided.',
@@ -240,6 +318,13 @@ class BackendListingAdapter {
       }
     }
 
+    final knownCategory = backendCategoryById(
+      _parseListingId(json['category_id'], fallback: seed?.categoryId ?? 0),
+    );
+    if (knownCategory != null) {
+      return knownCategory.name;
+    }
+
     if (seed != null && !_isFallbackCategory(seed.category)) {
       return seed.category;
     }
@@ -276,6 +361,120 @@ class BackendListingAdapter {
 
   bool _isFallbackSeller(String value) {
     return value.trim().isEmpty || value == _fallbackSellerLabel;
+  }
+}
+
+class BackendListingCategory {
+  const BackendListingCategory({
+    required this.id,
+    required this.name,
+    required this.aliases,
+  });
+
+  final int id;
+  final String name;
+  final List<String> aliases;
+}
+
+const List<BackendListingCategory> _backendListingCategories =
+    <BackendListingCategory>[
+      BackendListingCategory(
+        id: 1,
+        name: 'Electronics',
+        aliases: <String>['electronics', 'gadgets'],
+      ),
+      BackendListingCategory(id: 2, name: 'Books', aliases: <String>['books']),
+      BackendListingCategory(
+        id: 3,
+        name: 'School Supplies',
+        aliases: <String>['school supplies', 'lab tools'],
+      ),
+      BackendListingCategory(
+        id: 4,
+        name: 'Uniforms',
+        aliases: <String>['uniforms'],
+      ),
+      BackendListingCategory(
+        id: 5,
+        name: 'Dorm Essentials',
+        aliases: <String>['dorm essentials'],
+      ),
+      BackendListingCategory(
+        id: 6,
+        name: 'Others',
+        aliases: <String>[
+          'others',
+          'sports',
+          'sports equipment',
+          'clothing',
+          'food',
+          'drinks',
+          'accessories',
+        ],
+      ),
+    ];
+
+BackendListingCategory? backendCategoryById(int id) {
+  for (final category in _backendListingCategories) {
+    if (category.id == id) {
+      return category;
+    }
+  }
+
+  return null;
+}
+
+BackendListingCategory? backendCategoryForFrontendLabel(String label) {
+  final normalizedLabel = _normalizeLookupValue(label);
+  if (normalizedLabel.isEmpty) {
+    return null;
+  }
+
+  for (final category in _backendListingCategories) {
+    if (_normalizeLookupValue(category.name) == normalizedLabel) {
+      return category;
+    }
+
+    for (final alias in category.aliases) {
+      if (_normalizeLookupValue(alias) == normalizedLabel) {
+        return category;
+      }
+    }
+  }
+
+  return null;
+}
+
+String normalizeListingConditionLabel(String label) {
+  switch (_normalizeLookupValue(label)) {
+    case 'brand new':
+    case 'brandnew':
+    case 'new':
+      return 'Brand New';
+    case 'pre-owned':
+    case 'preowned':
+    case 'used':
+    case 'good':
+    case 'like new':
+    case 'like_new':
+      return 'Pre-owned';
+    case 'fair':
+      return 'Fair';
+    case 'poor':
+      return 'Poor';
+    default:
+      return label.trim().isNotEmpty ? label.trim() : 'Pre-owned';
+  }
+}
+
+String backendItemConditionForLabel(String label) {
+  switch (_normalizeLookupValue(label)) {
+    case 'brand new':
+    case 'brandnew':
+    case 'new':
+      return 'brandnew';
+    default:
+      return 'preowned';
   }
 }
 
@@ -379,34 +578,52 @@ String _priceLabelFromApi(dynamic rawValue, {String? fallback}) {
     return seed.isNotEmpty ? seed : 'P0.00';
   }
 
-  if (value.startsWith('P') || value.toUpperCase().startsWith('PHP')) {
-    return value;
-  }
+  final normalizedValue = value
+      .replaceAll('PHP', '')
+      .replaceAll('Php', '')
+      .replaceAll('php', '')
+      .replaceAll('P', '')
+      .replaceAll('p', '')
+      .replaceAll('\u20B1', '')
+      .replaceAll(',', '')
+      .trim();
 
-  final parsed = double.tryParse(value);
+  final parsed = double.tryParse(normalizedValue);
   if (parsed != null) {
     return 'P${parsed.toStringAsFixed(2)}';
   }
 
-  return 'P$value';
+  return value.startsWith('P') ? value : 'P$value';
 }
 
 String _conditionLabelFromApi(dynamic rawValue, {String? fallback}) {
-  switch (_stringValue(rawValue).toLowerCase()) {
+  switch (_normalizeLookupValue(rawValue?.toString() ?? '')) {
     case 'brandnew':
+    case 'brand new':
     case 'new':
-      return 'New';
-    case 'like_new':
-    case 'good':
+      return 'Brand New';
     case 'preowned':
-      return 'Good';
+    case 'pre-owned':
+    case 'used':
+    case 'good':
+    case 'like_new':
+    case 'like new':
+      return 'Pre-owned';
     case 'fair':
       return 'Fair';
     case 'poor':
       return 'Poor';
     default:
-      return (fallback ?? '').trim().isNotEmpty ? fallback!.trim() : 'Used';
+      return normalizeListingConditionLabel(fallback ?? '');
   }
+}
+
+List<Map<String, dynamic>> _imageListValue(dynamic rawValue) {
+  if (rawValue is! List) {
+    return const <Map<String, dynamic>>[];
+  }
+
+  return rawValue.map(_mapValue).whereType<Map<String, dynamic>>().toList();
 }
 
 Map<String, dynamic>? _mapValue(dynamic rawValue) {
@@ -424,4 +641,28 @@ String _sellerAvatarFromName(String sellerName) {
 String _stringValue(dynamic rawValue, {String fallback = ''}) {
   final value = rawValue?.toString().trim() ?? '';
   return value.isEmpty ? fallback : value;
+}
+
+String _normalizeLookupValue(String value) {
+  return value.trim().toLowerCase().replaceAll('_', ' ');
+}
+
+String _publicImageUrl(String imagePath) {
+  final normalizedImagePath = imagePath.trim();
+  if (normalizedImagePath.isEmpty) {
+    return '';
+  }
+
+  final parsedUri = Uri.tryParse(normalizedImagePath);
+  if (parsedUri != null && parsedUri.hasScheme) {
+    return normalizedImagePath;
+  }
+
+  final relativePath = normalizedImagePath.startsWith('/')
+      ? normalizedImagePath.substring(1)
+      : normalizedImagePath;
+
+  return Uri.parse(
+    '${AppConfig.baseUrl}/',
+  ).resolve('storage/$relativePath').toString();
 }

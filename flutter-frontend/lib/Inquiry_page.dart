@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
+
 import 'Inquiry_model.dart';
 import 'Inquiry_service.dart';
+import 'auth_service.dart';
+import 'core/network/api_client.dart';
+import 'inquiry_detail_page.dart';
 
-// ─── Color Palette ────────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
-// ─── Inquiry Page ─────────────────────────────────────────────────────────────
 class InquiryPage extends StatefulWidget {
   const InquiryPage({super.key});
 
@@ -18,12 +20,24 @@ class InquiryPage extends StatefulWidget {
 
 class _InquiryPageState extends State<InquiryPage>
     with SingleTickerProviderStateMixin {
+  final ApiClient _apiClient = ApiClient();
+
   late TabController _tabController;
+  List<Inquiry> _receivedInquiries = <Inquiry>[];
+  List<Inquiry> _sentInquiries = <Inquiry>[];
+  Set<int> _busyInquiryIds = <int>{};
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  int get _pendingCount => _receivedInquiries
+      .where((inquiry) => inquiry.status == InquiryStatus.pending)
+      .length;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadInquiries();
   }
 
   @override
@@ -32,22 +46,142 @@ class _InquiryPageState extends State<InquiryPage>
     super.dispose();
   }
 
+  Future<void> _loadInquiries({bool showLoading = true}) async {
+    if (!AuthService().isLoggedIn) {
+      setState(() {
+        _isLoading = false;
+        _receivedInquiries = <Inquiry>[];
+        _sentInquiries = <Inquiry>[];
+        _errorMessage = 'Please log in to view your inquiries.';
+      });
+      return;
+    }
+
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    } else {
+      setState(() {
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final results = await Future.wait<List<Inquiry>>(<Future<List<Inquiry>>>[
+        InquiryService().fetchReceivedInquiries(),
+        InquiryService().fetchSentInquiries(),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _receivedInquiries = results[0];
+        _sentInquiries = results[1];
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+    }
+  }
+
+  Future<void> _handleDecision(Inquiry inquiry, InquiryStatus decision) async {
+    if (_busyInquiryIds.contains(inquiry.id)) {
+      return;
+    }
+
+    setState(() {
+      _busyInquiryIds = <int>{..._busyInquiryIds, inquiry.id};
+    });
+
+    try {
+      await InquiryService().decideInquiry(
+        inquiryId: inquiry.id,
+        decision: decision,
+        fallback: inquiry,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            decision == InquiryStatus.accepted
+                ? 'Inquiry accepted.'
+                : 'Inquiry declined.',
+          ),
+          backgroundColor: kNavy,
+        ),
+      );
+
+      await _loadInquiries(showLoading: false);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is FormatException
+                ? error.message
+                : _apiClient.mapError(error),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyInquiryIds = <int>{
+            ..._busyInquiryIds.where((id) => id != inquiry.id),
+          };
+        });
+      }
+    }
+  }
+
+  Future<void> _openInquiryDetail(Inquiry inquiry, bool isReceived) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            InquiryDetailPage(inquiry: inquiry, isReceived: isReceived),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    await _loadInquiries(showLoading: false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final received = InquiryService().receivedInquiries;
-    final sent = InquiryService().sentInquiries;
-    final pendingCount = InquiryService().pendingCount;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
       body: SafeArea(
         child: Column(
-          children: [
-            // ── Header ────────────────────────────────────────────────────
+          children: <Widget>[
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [kDarkNavy, kNavy],
+                  colors: <Color>[kDarkNavy, kNavy],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -55,9 +189,9 @@ class _InquiryPageState extends State<InquiryPage>
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: <Widget>[
                   Row(
-                    children: [
+                    children: <Widget>[
                       const Text(
                         'Inquiries',
                         style: TextStyle(
@@ -67,7 +201,7 @@ class _InquiryPageState extends State<InquiryPage>
                           letterSpacing: 0.3,
                         ),
                       ),
-                      if (pendingCount > 0) ...[
+                      if (_pendingCount > 0) ...<Widget>[
                         const SizedBox(width: 10),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -79,7 +213,7 @@ class _InquiryPageState extends State<InquiryPage>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '$pendingCount pending',
+                            '$_pendingCount pending',
                             style: const TextStyle(
                               color: kNavy,
                               fontSize: 11,
@@ -92,7 +226,7 @@ class _InquiryPageState extends State<InquiryPage>
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Manage your buy & sell inquiries',
+                    'Manage your buy and sell inquiries',
                     style: TextStyle(color: kGold, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
@@ -106,32 +240,53 @@ class _InquiryPageState extends State<InquiryPage>
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
-                    tabs: [
-                      Tab(text: 'Received (${received.length})'),
-                      Tab(text: 'Sent (${sent.length})'),
+                    tabs: <Tab>[
+                      Tab(text: 'Received (${_receivedInquiries.length})'),
+                      Tab(text: 'Sent (${_sentInquiries.length})'),
                     ],
                   ),
                 ],
               ),
             ),
-
-            // ── Tab Views ─────────────────────────────────────────────────
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _InquiryList(
-                    inquiries: received,
-                    isReceived: true,
-                    onAction: () => setState(() {}),
-                  ),
-                  _InquiryList(
-                    inquiries: sent,
-                    isReceived: false,
-                    onAction: () => setState(() {}),
-                  ),
-                ],
-              ),
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                      ),
+                    )
+                  : _errorMessage != null &&
+                        _receivedInquiries.isEmpty &&
+                        _sentInquiries.isEmpty
+                  ? _InquiryLoadError(
+                      message: _errorMessage!,
+                      onRetry: _loadInquiries,
+                    )
+                  : TabBarView(
+                      controller: _tabController,
+                      children: <Widget>[
+                        _InquiryList(
+                          inquiries: _receivedInquiries,
+                          isReceived: true,
+                          busyInquiryIds: _busyInquiryIds,
+                          onRefresh: () => _loadInquiries(showLoading: false),
+                          onTap: (inquiry) {
+                            _openInquiryDetail(inquiry, true);
+                          },
+                          onDecision: _handleDecision,
+                        ),
+                        _InquiryList(
+                          inquiries: _sentInquiries,
+                          isReceived: false,
+                          busyInquiryIds: _busyInquiryIds,
+                          onRefresh: () => _loadInquiries(showLoading: false),
+                          onTap: (inquiry) {
+                            _openInquiryDetail(inquiry, false);
+                          },
+                          onDecision: _handleDecision,
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -140,17 +295,69 @@ class _InquiryPageState extends State<InquiryPage>
   }
 }
 
-// ─── Inquiry List ─────────────────────────────────────────────────────────────
-class _InquiryList extends StatelessWidget {
-  final List<Inquiry> inquiries;
-  final bool isReceived;
-  final VoidCallback onAction;
+class _InquiryLoadError extends StatelessWidget {
+  const _InquiryLoadError({required this.message, required this.onRetry});
 
+  final String message;
+  final Future<void> Function({bool showLoading}) onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const Icon(Icons.cloud_off_rounded, size: 64, color: kNavy),
+            const SizedBox(height: 12),
+            const Text(
+              'Unable to load inquiries',
+              style: TextStyle(
+                color: kNavy,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => onRetry(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kNavy,
+                foregroundColor: kWhite,
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InquiryList extends StatelessWidget {
   const _InquiryList({
     required this.inquiries,
     required this.isReceived,
-    required this.onAction,
+    required this.busyInquiryIds,
+    required this.onRefresh,
+    required this.onTap,
+    required this.onDecision,
   });
+
+  final List<Inquiry> inquiries;
+  final bool isReceived;
+  final Set<int> busyInquiryIds;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<Inquiry> onTap;
+  final Future<void> Function(Inquiry inquiry, InquiryStatus decision)
+  onDecision;
 
   @override
   Widget build(BuildContext context) {
@@ -158,11 +365,9 @@ class _InquiryList extends StatelessWidget {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+          children: <Widget>[
             Icon(
-              isReceived
-                  ? Icons.inbox_outlined
-                  : Icons.send_outlined,
+              isReceived ? Icons.inbox_outlined : Icons.send_outlined,
               size: 64,
               color: Colors.grey[300],
             ),
@@ -187,55 +392,65 @@ class _InquiryList extends StatelessWidget {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      physics: const BouncingScrollPhysics(),
-      itemCount: inquiries.length,
-      itemBuilder: (context, index) {
-        return _InquiryCard(
-          inquiry: inquiries[index],
-          isReceived: isReceived,
-          onAction: onAction,
-        );
-      },
+    return RefreshIndicator(
+      color: kNavy,
+      onRefresh: onRefresh,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: inquiries.length,
+        itemBuilder: (context, index) {
+          final inquiry = inquiries[index];
+          return _InquiryCard(
+            inquiry: inquiry,
+            isReceived: isReceived,
+            isBusy: busyInquiryIds.contains(inquiry.id),
+            onTap: () => onTap(inquiry),
+            onDecision: onDecision,
+          );
+        },
+      ),
     );
   }
 }
 
-// ─── Inquiry Card ─────────────────────────────────────────────────────────────
 class _InquiryCard extends StatelessWidget {
-  final Inquiry inquiry;
-  final bool isReceived;
-  final VoidCallback onAction;
-
   const _InquiryCard({
     required this.inquiry,
     required this.isReceived,
-    required this.onAction,
+    required this.isBusy,
+    required this.onTap,
+    required this.onDecision,
   });
 
-  // Status styling
-  _StatusStyle _getStatusStyle(InquiryStatus status) {
-    Color bg, text;
-    IconData icon;
+  final Inquiry inquiry;
+  final bool isReceived;
+  final bool isBusy;
+  final VoidCallback onTap;
+  final Future<void> Function(Inquiry inquiry, InquiryStatus decision)
+  onDecision;
+
+  _StatusStyle _statusStyle(InquiryStatus status) {
     switch (status) {
       case InquiryStatus.pending:
-        bg = const Color(0xFFFFF8E1);
-        text = const Color(0xFFE65100);
-        icon = Icons.hourglass_empty_rounded;
-        break;
+        return const _StatusStyle(
+          bg: Color(0xFFFFF8E1),
+          text: Color(0xFFE65100),
+          icon: Icons.hourglass_empty_rounded,
+        );
       case InquiryStatus.accepted:
-        bg = const Color(0xFFE8F5E9);
-        text = const Color(0xFF2E7D32);
-        icon = Icons.check_circle_outline_rounded;
-        break;
+        return const _StatusStyle(
+          bg: Color(0xFFE8F5E9),
+          text: Color(0xFF2E7D32),
+          icon: Icons.check_circle_outline_rounded,
+        );
       case InquiryStatus.declined:
-        bg = const Color(0xFFFFEBEE);
-        text = const Color(0xFFC62828);
-        icon = Icons.cancel_outlined;
-        break;
+        return const _StatusStyle(
+          bg: Color(0xFFFFEBEE),
+          text: Color(0xFFC62828),
+          icon: Icons.cancel_outlined,
+        );
     }
-    return _StatusStyle(bg: bg, text: text, icon: icon);
   }
 
   String _statusLabel(InquiryStatus status) {
@@ -249,227 +464,228 @@ class _InquiryCard extends StatelessWidget {
     }
   }
 
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
+  String _timeAgo(DateTime value) {
+    final diff = DateTime.now().difference(value);
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}m ago';
+    }
+    if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    }
     return '${diff.inDays}d ago';
   }
 
   @override
   Widget build(BuildContext context) {
-    final style = _getStatusStyle(inquiry.status);
+    final style = _statusStyle(inquiry.status);
+    final counterpartName = inquiry.counterpartyName(isReceived: isReceived);
+    final counterpartAvatar = inquiry.counterpartyAvatar(
+      isReceived: isReceived,
+    );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: kWhite,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top Row: avatar + info + status ──────────────────────────
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: kGold,
-                  child: Text(
-                    inquiry.buyerAvatar,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: kWhite,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: kGold,
+                    child: Text(
+                      counterpartAvatar,
+                      style: const TextStyle(
+                        color: kNavy,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          counterpartName,
+                          style: const TextStyle(
+                            color: kNavy,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          '${isReceived ? 'Buyer' : 'Seller'} - ${inquiry.preferredContactLabel}',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: style.bg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(style.icon, color: style.text, size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          _statusLabel(inquiry.status),
+                          style: TextStyle(
+                            color: style.text,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.inventory_2_outlined,
+                    color: kNavy,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      inquiry.listingTitle,
+                      style: const TextStyle(
+                        color: kNavy,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    inquiry.listingMetaLabel,
                     style: const TextStyle(
                       color: kNavy,
                       fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        inquiry.buyerName,
-                        style: const TextStyle(
-                          color: kNavy,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      Text(
-                        inquiry.buyerStudentId,
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Status badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: style.bg,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(style.icon, color: style.text, size: 12),
-                      const SizedBox(width: 4),
-                      Text(
-                        _statusLabel(inquiry.status),
-                        style: TextStyle(
-                          color: style.text,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
-
-            // ── Listing Info ──────────────────────────────────────────────
-            Row(
-              children: [
-                const Icon(Icons.inventory_2_outlined, color: kNavy, size: 14),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    inquiry.listingTitle,
-                    style: const TextStyle(
-                      color: kNavy,
-                      fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                Text(
-                  inquiry.listingPrice,
-                  style: const TextStyle(
-                    color: kNavy,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
+                ],
+              ),
+              if (inquiry.message.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 6),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F6FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '"${inquiry.message}"',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ),
               ],
-            ),
-
-            if (inquiry.message.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF4F6FF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '"${inquiry.message}"',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
+              const SizedBox(height: 10),
+              Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.access_time_rounded,
+                    size: 12,
+                    color: Colors.grey[400],
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _timeAgo(inquiry.createdAt),
+                    style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                  ),
+                  const Spacer(),
+                  if (isBusy)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                      ),
+                    )
+                  else if (isReceived &&
+                      inquiry.status == InquiryStatus.pending) ...<Widget>[
+                    _ActionButton(
+                      label: 'Decline',
+                      color: Colors.red.shade100,
+                      textColor: Colors.red.shade700,
+                      onTap: () => onDecision(inquiry, InquiryStatus.declined),
+                    ),
+                    const SizedBox(width: 8),
+                    _ActionButton(
+                      label: 'Accept',
+                      color: Colors.green.shade100,
+                      textColor: Colors.green.shade700,
+                      onTap: () => onDecision(inquiry, InquiryStatus.accepted),
+                    ),
+                  ] else
+                    _ActionButton(
+                      label: 'View',
+                      color: Colors.grey.shade100,
+                      textColor: Colors.grey.shade700,
+                      onTap: onTap,
+                    ),
+                ],
               ),
             ],
-
-            const SizedBox(height: 10),
-
-            // ── Bottom Row: time + actions ────────────────────────────────
-            Row(
-              children: [
-                Icon(
-                  Icons.access_time_rounded,
-                  size: 12,
-                  color: Colors.grey[400],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _timeAgo(inquiry.createdAt),
-                  style: TextStyle(color: Colors.grey[400], fontSize: 11),
-                ),
-                const Spacer(),
-                // Seller actions: accept / decline
-                if (isReceived &&
-                    inquiry.status == InquiryStatus.pending) ...[
-                  _ActionButton(
-                    label: 'Decline',
-                    color: Colors.red.shade100,
-                    textColor: Colors.red.shade700,
-                    onTap: () {
-                      InquiryService().declineInquiry(inquiry.id);
-                      onAction();
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _ActionButton(
-                    label: 'Accept',
-                    color: Colors.green.shade100,
-                    textColor: Colors.green.shade700,
-                    onTap: () {
-                      InquiryService().acceptInquiry(inquiry.id);
-                      onAction();
-                    },
-                  ),
-                ],
-                // Buyer: delete sent inquiry
-                if (!isReceived) ...[
-                  _ActionButton(
-                    label: 'Delete',
-                    color: Colors.grey.shade100,
-                    textColor: Colors.grey.shade600,
-                    onTap: () {
-                      InquiryService().deleteInquiry(inquiry.id);
-                      onAction();
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ─── Small action button ──────────────────────────────────────────────────────
 class _ActionButton extends StatelessWidget {
-  final String label;
-  final Color color;
-  final Color textColor;
-  final VoidCallback onTap;
-
   const _ActionButton({
     required this.label,
     required this.color,
     required this.textColor,
     required this.onTap,
   });
+
+  final String label;
+  final Color color;
+  final Color textColor;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -494,14 +710,14 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// ─── Internal helper ──────────────────────────────────────────────────────────
 class _StatusStyle {
-  final Color bg;
-  final Color text;
-  final IconData icon;
   const _StatusStyle({
     required this.bg,
     required this.text,
     required this.icon,
   });
+
+  final Color bg;
+  final Color text;
+  final IconData icon;
 }

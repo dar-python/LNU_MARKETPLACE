@@ -1,9 +1,12 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
+import 'auth_service.dart';
+import 'core/network/api_client.dart';
 import 'listing_service.dart';
 
-// ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
@@ -20,42 +23,78 @@ class _AddListingPageState extends State<AddListingPage> {
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final ApiClient _apiClient = ApiClient();
+  final ImagePicker _picker = ImagePicker();
 
   String? _selectedCategory;
   String? _selectedCondition;
-  File? _selectedImage;
+  List<File> _selectedImages = <File>[];
   bool _isLoading = false;
   String? _errorMessage;
 
-  final List<String> _categories = [
-    'Gadgets', 'Lab Tools', 'Sports Equipment',
-    'School Supplies', 'Clothing', 'Electronics',
-    'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
+  final List<String> _categories = <String>[
+    'Gadgets',
+    'Lab Tools',
+    'Sports Equipment',
+    'School Supplies',
+    'Clothing',
+    'Electronics',
+    'Books',
+    'Uniforms',
+    'Food',
+    'Drinks',
+    'Accessories',
+    'Others',
   ];
 
-  final List<String> _conditions = ['Brand New', 'Pre-owned'];
+  final List<String> _conditions = <String>['Brand New', 'Pre-owned'];
 
-  final ImagePicker _picker = ImagePicker();
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
+  Future<void> _pickImages() async {
+    final images = await _picker.pickMultiImage(
       imageQuality: 80,
       maxWidth: 800,
     );
-    if (image != null) {
-      setState(() => _selectedImage = File(image.path));
+
+    if (images.isEmpty) {
+      return;
     }
+
+    final selectedFiles = images
+        .take(10)
+        .map((image) => File(image.path))
+        .toList();
+
+    setState(() {
+      _selectedImages = selectedFiles;
+      _errorMessage = images.length > 10
+          ? 'Only the first 10 images will be uploaded.'
+          : null;
+    });
   }
 
   Future<void> _submitListing() async {
-    // Validate
+    if (!AuthService().isLoggedIn) {
+      setState(() => _errorMessage = 'Please log in to post a listing.');
+      return;
+    }
     if (_titleController.text.trim().isEmpty) {
       setState(() => _errorMessage = 'Please enter a title');
       return;
     }
     if (_priceController.text.trim().isEmpty) {
       setState(() => _errorMessage = 'Please enter a price');
+      return;
+    }
+    if (double.tryParse(_normalizedPriceInput(_priceController.text)) == null) {
+      setState(() => _errorMessage = 'Please enter a valid price');
       return;
     }
     if (_selectedCategory == null) {
@@ -76,50 +115,88 @@ class _AddListingPageState extends State<AddListingPage> {
       _errorMessage = null;
     });
 
-    // Save to app memory via ListingService
-    ListingService().addListing(
-      title: _titleController.text.trim(),
-      price: '₱${double.parse(_priceController.text).toStringAsFixed(2)}',
-      category: _selectedCategory!,
-      condition: _selectedCondition!,
-      description: _descriptionController.text.trim(),
-      imageFile: _selectedImage,
-    );
+    try {
+      final result = await ListingService().createListing(
+        title: _titleController.text.trim(),
+        price: _priceController.text.trim(),
+        category: _selectedCategory!,
+        condition: _selectedCondition!,
+        description: _descriptionController.text.trim(),
+        imageFiles: _selectedImages,
+      );
 
-    setState(() => _isLoading = false);
+      if (!mounted) {
+        return;
+      }
 
-    if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.hasImageUploadErrors
+                ? 'Listing posted, but ${result.imageUploadErrors.length} image upload'
+                      '${result.imageUploadErrors.length == 1 ? '' : 's'} failed.'
+                : 'Listing posted successfully!',
+          ),
+          backgroundColor: result.hasImageUploadErrors
+              ? Colors.orange
+              : Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
 
-    // Show success and go back
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✅ Listing posted successfully!'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
-    Navigator.pop(context);
+      Navigator.pop(context, result.listing);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _normalizedPriceInput(String value) {
+    return value
+        .trim()
+        .replaceAll('PHP', '')
+        .replaceAll('Php', '')
+        .replaceAll('php', '')
+        .replaceAll('P', '')
+        .replaceAll('p', '')
+        .replaceAll('\u20B1', '')
+        .replaceAll(',', '')
+        .trim();
   }
 
   @override
   Widget build(BuildContext context) {
+    final previewImage = _selectedImages.isNotEmpty
+        ? _selectedImages.first
+        : null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
       body: SafeArea(
         child: Column(
-          children: [
-            // ── Header ──────────────────────────────────────────────────
+          children: <Widget>[
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [kDarkNavy, kNavy],
+                  colors: <Color>[kDarkNavy, kNavy],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
               ),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
               child: Row(
-                children: [
+                children: <Widget>[
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
@@ -128,14 +205,18 @@ class _AddListingPageState extends State<AddListingPage> {
                         color: kWhite.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.arrow_back, color: kWhite, size: 20),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: kWhite,
+                        size: 20,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                      children: <Widget>[
                         Text(
                           'Post a Listing',
                           style: TextStyle(
@@ -154,21 +235,17 @@ class _AddListingPageState extends State<AddListingPage> {
                 ],
               ),
             ),
-
-            // ── Form ────────────────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    // ── Image Picker ─────────────────────────────────────
+                  children: <Widget>[
                     _buildLabel('Product Photo'),
                     const SizedBox(height: 8),
                     GestureDetector(
-                      onTap: _pickImage,
+                      onTap: _pickImages,
                       child: Container(
                         width: double.infinity,
                         height: 180,
@@ -176,10 +253,12 @@ class _AddListingPageState extends State<AddListingPage> {
                           color: kWhite,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: _selectedImage != null ? kNavy : Colors.grey.shade300,
-                            width: _selectedImage != null ? 2 : 1,
+                            color: previewImage != null
+                                ? kNavy
+                                : Colors.grey.shade300,
+                            width: previewImage != null ? 2 : 1,
                           ),
-                          boxShadow: [
+                          boxShadow: <BoxShadow>[
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.05),
                               blurRadius: 8,
@@ -187,30 +266,65 @@ class _AddListingPageState extends State<AddListingPage> {
                             ),
                           ],
                         ),
-                        child: _selectedImage != null
+                        child: previewImage != null
                             ? Stack(
-                                children: [
+                                children: <Widget>[
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(16),
                                     child: Image.file(
-                                      _selectedImage!,
+                                      previewImage,
                                       width: double.infinity,
                                       height: double.infinity,
                                       fit: BoxFit.cover,
                                     ),
                                   ),
+                                  if (_selectedImages.length > 1)
+                                    Positioned(
+                                      left: 12,
+                                      bottom: 12,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: kDarkNavy.withValues(
+                                            alpha: 0.82,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${_selectedImages.length} images selected',
+                                          style: const TextStyle(
+                                            color: kWhite,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   Positioned(
                                     top: 8,
                                     right: 8,
                                     child: GestureDetector(
-                                      onTap: () => setState(() => _selectedImage = null),
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedImages = <File>[],
+                                        );
+                                      },
                                       child: Container(
                                         padding: const EdgeInsets.all(6),
                                         decoration: const BoxDecoration(
                                           color: Colors.red,
                                           shape: BoxShape.circle,
                                         ),
-                                        child: const Icon(Icons.close, color: kWhite, size: 16),
+                                        child: const Icon(
+                                          Icons.close,
+                                          color: kWhite,
+                                          size: 16,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -218,18 +332,33 @@ class _AddListingPageState extends State<AddListingPage> {
                                     bottom: 8,
                                     right: 8,
                                     child: GestureDetector(
-                                      onTap: _pickImage,
+                                      onTap: _pickImages,
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: kNavy.withValues(alpha: 0.8),
-                                          borderRadius: BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: const Row(
-                                          children: [
-                                            Icon(Icons.edit, color: kWhite, size: 12),
+                                          children: <Widget>[
+                                            Icon(
+                                              Icons.edit,
+                                              color: kWhite,
+                                              size: 12,
+                                            ),
                                             SizedBox(width: 4),
-                                            Text('Change', style: TextStyle(color: kWhite, fontSize: 11)),
+                                            Text(
+                                              'Change',
+                                              style: TextStyle(
+                                                color: kWhite,
+                                                fontSize: 11,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -239,18 +368,22 @@ class _AddListingPageState extends State<AddListingPage> {
                               )
                             : Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
+                                children: <Widget>[
                                   Container(
                                     padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF4F6FF),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFF4F6FF),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.add_photo_alternate_outlined, color: kNavy, size: 32),
+                                    child: const Icon(
+                                      Icons.add_photo_alternate_outlined,
+                                      color: kNavy,
+                                      size: 32,
+                                    ),
                                   ),
                                   const SizedBox(height: 10),
                                   const Text(
-                                    'Tap to add a photo',
+                                    'Tap to add photos',
                                     style: TextStyle(
                                       color: kNavy,
                                       fontWeight: FontWeight.w600,
@@ -259,16 +392,17 @@ class _AddListingPageState extends State<AddListingPage> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Pick from gallery',
-                                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                    'Pick one or more from gallery',
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
                               ),
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // ── Title ────────────────────────────────────────────
                     _buildLabel('Title'),
                     const SizedBox(height: 8),
                     _buildTextField(
@@ -277,19 +411,17 @@ class _AddListingPageState extends State<AddListingPage> {
                       icon: Icons.title_rounded,
                     ),
                     const SizedBox(height: 16),
-
-                    // ── Price ────────────────────────────────────────────
-                    _buildLabel('Price (₱)'),
+                    _buildLabel('Price (P)'),
                     const SizedBox(height: 8),
                     _buildTextField(
                       controller: _priceController,
                       hint: 'e.g. 150',
                       icon: Icons.payments_outlined,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                     ),
                     const SizedBox(height: 16),
-
-                    // ── Category ─────────────────────────────────────────
                     _buildLabel('Category'),
                     const SizedBox(height: 8),
                     _buildDropdown(
@@ -297,31 +429,35 @@ class _AddListingPageState extends State<AddListingPage> {
                       hint: 'Select a category',
                       icon: Icons.category_outlined,
                       items: _categories,
-                      onChanged: (val) => setState(() => _selectedCategory = val),
+                      onChanged: (value) {
+                        setState(() => _selectedCategory = value);
+                      },
                     ),
                     const SizedBox(height: 16),
-
-                    // ── Condition ─────────────────────────────────────────
                     _buildLabel('Condition'),
                     const SizedBox(height: 8),
                     Row(
-                      children: _conditions.map((cond) {
-                        final isSelected = _selectedCondition == cond;
+                      children: _conditions.map((condition) {
+                        final isSelected = _selectedCondition == condition;
                         return Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() => _selectedCondition = cond),
+                            onTap: () {
+                              setState(() => _selectedCondition = condition);
+                            },
                             child: Container(
                               margin: EdgeInsets.only(
-                                right: cond != _conditions.last ? 8 : 0,
+                                right: condition != _conditions.last ? 8 : 0,
                               ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               decoration: BoxDecoration(
                                 color: isSelected ? kNavy : kWhite,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: isSelected ? kNavy : Colors.grey.shade300,
+                                  color: isSelected
+                                      ? kNavy
+                                      : Colors.grey.shade300,
                                 ),
-                                boxShadow: [
+                                boxShadow: <BoxShadow>[
                                   BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.04),
                                     blurRadius: 6,
@@ -330,21 +466,27 @@ class _AddListingPageState extends State<AddListingPage> {
                                 ],
                               ),
                               child: Column(
-                                children: [
+                                children: <Widget>[
                                   Icon(
-                                    cond == 'Brand New'
+                                    condition == 'Brand New'
                                         ? Icons.fiber_new_rounded
                                         : Icons.recycling_rounded,
-                                    color: isSelected ? kGold : Colors.grey[400],
+                                    color: isSelected
+                                        ? kGold
+                                        : Colors.grey[400],
                                     size: 20,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    cond,
+                                    condition,
                                     style: TextStyle(
-                                      color: isSelected ? kWhite : Colors.grey[600],
+                                      color: isSelected
+                                          ? kWhite
+                                          : Colors.grey[600],
                                       fontSize: 12,
-                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
                                     ),
                                   ),
                                 ],
@@ -355,15 +497,13 @@ class _AddListingPageState extends State<AddListingPage> {
                       }).toList(),
                     ),
                     const SizedBox(height: 16),
-
-                    // ── Description ───────────────────────────────────────
                     _buildLabel('Description'),
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(
                         color: kWhite,
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
+                        boxShadow: <BoxShadow>[
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 8,
@@ -376,11 +516,19 @@ class _AddListingPageState extends State<AddListingPage> {
                         maxLines: 4,
                         style: const TextStyle(fontSize: 14, color: kNavy),
                         decoration: InputDecoration(
-                          hintText: 'Describe your item — condition details, reason for selling, etc.',
-                          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
+                          hintText:
+                              'Describe your item - condition details, reason for selling, etc.',
+                          hintStyle: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 13,
+                          ),
                           prefixIcon: const Padding(
                             padding: EdgeInsets.only(bottom: 60),
-                            child: Icon(Icons.description_outlined, color: kNavy, size: 20),
+                            child: Icon(
+                              Icons.description_outlined,
+                              color: kNavy,
+                              size: 20,
+                            ),
                           ),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.all(14),
@@ -388,24 +536,32 @@ class _AddListingPageState extends State<AddListingPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // ── Error Message ─────────────────────────────────────
-                    if (_errorMessage != null) ...[
+                    if (_errorMessage != null) ...<Widget>[
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.red[50],
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: Colors.red[200]!),
                         ),
                         child: Row(
-                          children: [
-                            Icon(Icons.error_outline, color: Colors.red[400], size: 16),
+                          children: <Widget>[
+                            Icon(
+                              Icons.error_outline,
+                              color: Colors.red[400],
+                              size: 16,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _errorMessage!,
-                                style: TextStyle(color: Colors.red[600], fontSize: 12),
+                                style: TextStyle(
+                                  color: Colors.red[600],
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],
@@ -413,8 +569,6 @@ class _AddListingPageState extends State<AddListingPage> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
-                    // ── Submit Button ─────────────────────────────────────
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -424,12 +578,18 @@ class _AddListingPageState extends State<AddListingPage> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(color: kNavy, strokeWidth: 2.5),
+                                child: CircularProgressIndicator(
+                                  color: kNavy,
+                                  strokeWidth: 2.5,
+                                ),
                               )
                             : const Icon(Icons.upload_rounded, size: 20),
                         label: Text(
                           _isLoading ? 'Posting...' : 'Post Listing',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: kGold,
@@ -452,10 +612,16 @@ class _AddListingPageState extends State<AddListingPage> {
     );
   }
 
-  Widget _buildLabel(String text) => Text(
-    text,
-    style: const TextStyle(color: kNavy, fontSize: 13, fontWeight: FontWeight.w600),
-  );
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: kNavy,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -467,7 +633,7 @@ class _AddListingPageState extends State<AddListingPage> {
       decoration: BoxDecoration(
         color: kWhite,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
@@ -502,7 +668,7 @@ class _AddListingPageState extends State<AddListingPage> {
       decoration: BoxDecoration(
         color: kWhite,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: <BoxShadow>[
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
@@ -515,23 +681,33 @@ class _AddListingPageState extends State<AddListingPage> {
           value: value,
           isExpanded: true,
           hint: Row(
-            children: [
+            children: <Widget>[
               Icon(icon, color: kNavy, size: 20),
               const SizedBox(width: 12),
-              Text(hint, style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+              Text(
+                hint,
+                style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              ),
             ],
           ),
           icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey[400]),
-          items: items.map((item) => DropdownMenuItem(
-            value: item,
-            child: Row(
-              children: [
-                Icon(icon, color: kNavy, size: 20),
-                const SizedBox(width: 12),
-                Text(item, style: const TextStyle(color: kNavy, fontSize: 13)),
-              ],
-            ),
-          )).toList(),
+          items: items
+              .map(
+                (item) => DropdownMenuItem<String>(
+                  value: item,
+                  child: Row(
+                    children: <Widget>[
+                      Icon(icon, color: kNavy, size: 20),
+                      const SizedBox(width: 12),
+                      Text(
+                        item,
+                        style: const TextStyle(color: kNavy, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
           onChanged: onChanged,
         ),
       ),

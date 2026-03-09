@@ -180,7 +180,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sign in with your LNU email',
+                    'Sign in with your LNU student ID',
                     style: TextStyle(color: Colors.grey[500], fontSize: 13),
                   ),
                   const SizedBox(height: 28),
@@ -190,7 +190,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _identifierController,
-                    hint: 'Enter your LNU email',
+                    hint: 'Enter your LNU student ID',
                     icon: Icons.email_outlined,
                     keyboardType: TextInputType.emailAddress,
                   ),
