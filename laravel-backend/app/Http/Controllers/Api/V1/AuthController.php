@@ -112,17 +112,16 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         $validated = $request->validated();
-        $identifier = (string) $validated['identifier'];
+        $email = isset($validated['email']) && is_string($validated['email']) && $validated['email'] !== ''
+            ? $validated['email']
+            : null;
+        $studentId = isset($validated['student_id']) && is_string($validated['student_id']) && $validated['student_id'] !== ''
+            ? $validated['student_id']
+            : null;
         $password = (string) $validated['password'];
+        $identifier = $email ?? $studentId ?? '';
 
-        $query = User::query()->with('roles');
-        if (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
-            $query->where('email', $identifier);
-        } else {
-            $query->where('student_id', $identifier);
-        }
-
-        $user = $query->first();
+        $user = $this->findUserForLogin($email, $studentId);
 
         if (! $user || ! Hash::check($password, $user->password)) {
             $this->logActivity(
@@ -171,6 +170,7 @@ class AuthController extends Controller
 
             return ApiResponse::error('Email not verified yet.', [
                 'code' => 'EMAIL_NOT_VERIFIED',
+                'email' => $user->email,
                 'identifier' => $user->email,
             ], 403);
         }
@@ -466,8 +466,8 @@ class AuthController extends Controller
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
         $validated = $request->validated();
-        $identifier = (string) $validated['identifier'];
-        $user = $this->findUserByIdentifier($identifier);
+        $email = (string) $validated['email'];
+        $user = $this->findUserByEmail($email);
 
         // Always return success to prevent user enumeration
         if (! $user || $user->email === null) {
@@ -517,11 +517,11 @@ class AuthController extends Controller
     public function resetPassword(ResetPasswordRequest $request): JsonResponse
     {
         $validated = $request->validated();
-        $identifier = (string) $validated['identifier'];
+        $email = (string) $validated['email'];
         $otp = (string) $validated['otp'];
         $password = (string) $validated['password'];
 
-        $user = $this->findUserByIdentifier($identifier);
+        $user = $this->findUserByEmail($email);
 
         if (! $user) {
             return ApiResponse::error('Invalid request.', null, 422);
@@ -764,6 +764,29 @@ class AuthController extends Controller
     private function sendEmailOtp(string $email, string $otp, CarbonInterface $expiresAt): void
     {
         Mail::to($email)->send(new EmailOtpMail($otp, $expiresAt));
+    }
+
+    private function findUserForLogin(?string $email, ?string $studentId): ?User
+    {
+        $query = User::query()->with('roles');
+
+        if (is_string($email) && $email !== '') {
+            return $query->where('email', $email)->first();
+        }
+
+        if (is_string($studentId) && $studentId !== '') {
+            return $query->where('student_id', $studentId)->first();
+        }
+
+        return null;
+    }
+
+    private function findUserByEmail(string $email): ?User
+    {
+        return User::query()
+            ->with('roles')
+            ->where('email', $email)
+            ->first();
     }
 
     private function findUserByIdentifier(string $identifier): ?User

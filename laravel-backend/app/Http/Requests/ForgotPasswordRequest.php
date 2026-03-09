@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\AllowedLnuEmail;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ForgotPasswordRequest extends FormRequest
@@ -17,7 +18,32 @@ class ForgotPasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'identifier' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', new AllowedLnuEmail],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $email = $this->normalizeString($this->input('email'));
+        $identifier = $this->normalizeString($this->input('identifier'));
+
+        if ($email === null && $identifier !== null) {
+            $email = $identifier;
+        }
+
+        $this->merge([
+            'email' => $email,
+        ]);
+    }
+
+    private function normalizeString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        return $normalized === '' ? null : $normalized;
     }
 }

@@ -32,6 +32,7 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::get('/listings', [ListingController::class, 'index']);
+    Route::get('/listings/{listing}', [ListingController::class, 'show']);
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/favorites', [FavoriteController::class, 'index']);
