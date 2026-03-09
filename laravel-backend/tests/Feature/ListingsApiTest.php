@@ -84,6 +84,37 @@ class ListingsApiTest extends TestCase
         ]);
     }
 
+    public function test_authenticated_user_can_create_listing_with_category_slug(): void
+    {
+        $owner = $this->createUser('2307011');
+        $token = $owner->createToken('test-token')->plainTextToken;
+        $category = Category::query()->create([
+            'name' => 'Slug Category',
+            'slug' => 'slug-category',
+            'description' => 'Slug based category',
+            'is_active' => true,
+            'sort_order' => 2,
+        ]);
+        $payload = $this->validListingPayload();
+        unset($payload['category_id']);
+        $payload['category_slug'] = $category->slug;
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/listings', $payload);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.listing.user_id', $owner->id)
+            ->assertJsonPath('data.listing.category_id', $category->id);
+
+        $this->assertDatabaseHas('listings', [
+            'user_id' => $owner->id,
+            'category_id' => $category->id,
+            'title' => $payload['title'],
+        ]);
+    }
+
     public function test_create_listing_validation_errors_for_missing_required_fields(): void
     {
         $owner = $this->createUser('2307006');

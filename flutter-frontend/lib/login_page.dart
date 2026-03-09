@@ -186,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 28),
 
                   // Email
-                  _buildLabel('LNU Email Address'),
+                  _buildLabel('LNU Student ID'),
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _identifierController,

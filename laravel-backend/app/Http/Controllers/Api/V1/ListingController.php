@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ListingBrowseRequest;
+use App\Models\Category;
 use App\Models\Listing;
 use App\Models\ListingImage;
 use App\Support\ApiResponse;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ListingController extends Controller
 {
@@ -168,7 +170,7 @@ class ListingController extends Controller
 
         $listing = Listing::query()->create([
             'user_id' => (int) $request->user()->id,
-            'category_id' => (int) $validated['category_id'],
+            'category_id' => $this->resolveCategoryId($validated),
             'title' => (string) $validated['title'],
             'description' => (string) $validated['description'],
             'price' => $validated['price'],
@@ -193,7 +195,7 @@ class ListingController extends Controller
         $validated = $request->validate($this->validationRules());
 
         $listing->fill([
-            'category_id' => (int) $validated['category_id'],
+            'category_id' => $this->resolveCategoryId($validated),
             'title' => (string) $validated['title'],
             'description' => (string) $validated['description'],
             'price' => $validated['price'],
@@ -235,7 +237,8 @@ class ListingController extends Controller
     private function validationRules(): array
     {
         return [
-            'category_id' => ['required', 'integer', 'exists:categories,id'],
+            'category_id' => ['nullable', 'integer', 'exists:categories,id', 'required_without:category_slug'],
+            'category_slug' => ['nullable', 'string', 'exists:categories,slug', 'required_without:category_id'],
             'title' => ['required', 'string', 'max:150'],
             'description' => ['required', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
@@ -272,6 +275,35 @@ class ListingController extends Controller
     private function normalizeItemCondition(string $itemCondition): string
     {
         return self::ITEM_CONDITION_NORMALIZATION_MAP[$itemCondition] ?? 'preowned';
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function resolveCategoryId(array $validated): int
+    {
+        if (isset($validated['category_id'])) {
+            return (int) $validated['category_id'];
+        }
+
+        $categorySlug = trim((string) ($validated['category_slug'] ?? ''));
+        if ($categorySlug === '') {
+            throw ValidationException::withMessages([
+                'category_id' => ['The category field is required.'],
+            ]);
+        }
+
+        $categoryId = Category::query()
+            ->where('slug', $categorySlug)
+            ->value('id');
+
+        if ($categoryId === null) {
+            throw ValidationException::withMessages([
+                'category_slug' => ['The selected category slug is invalid.'],
+            ]);
+        }
+
+        return (int) $categoryId;
     }
 
     /**
