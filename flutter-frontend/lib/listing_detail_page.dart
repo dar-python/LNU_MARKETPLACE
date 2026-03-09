@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'Inquiry_service.dart';
 import 'auth_service.dart';
+import 'core/network/api_client.dart';
 import 'favorite_service.dart';
 import 'listing_model_page.dart';
+import 'listing_service.dart';
 
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
@@ -11,23 +13,33 @@ const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
 class ListingDetailPage extends StatefulWidget {
-  final Listing listing;
-
   const ListingDetailPage({super.key, required this.listing});
+
+  final Listing listing;
 
   @override
   State<ListingDetailPage> createState() => _ListingDetailPageState();
 }
 
 class _ListingDetailPageState extends State<ListingDetailPage> {
+  final ApiClient _apiClient = ApiClient();
+
+  late Listing _listing;
+  List<ListingImageAsset> _detailImages = <ListingImageAsset>[];
   bool _isFavorite = false;
   bool _isLoadingFavoriteState = true;
   bool _isUpdatingFavorite = false;
+  bool _isLoadingDetail = true;
+  bool _isSendingInquiry = false;
+  String? _detailErrorMessage;
+  int _activeImageIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    _listing = widget.listing;
     _loadFavoriteState();
+    _loadListingDetail();
   }
 
   Future<void> _loadFavoriteState() async {
@@ -55,6 +67,42 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     });
   }
 
+  Future<void> _loadListingDetail() async {
+    setState(() {
+      _isLoadingDetail = true;
+      _detailErrorMessage = null;
+    });
+
+    try {
+      final detail = await ListingService().fetchListingDetail(
+        widget.listing.id,
+        fallback: widget.listing,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _listing = detail.listing;
+        _detailImages = detail.images;
+        _activeImageIndex = 0;
+        _isLoadingDetail = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingDetail = false;
+        _detailErrorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+    }
+  }
+
   Future<void> _toggleFavorite() async {
     if (!AuthService().isLoggedIn) {
       _showSnackBar('Please log in to save favorites.');
@@ -72,8 +120,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     });
 
     final error = wasAlreadyFavorite
-        ? await FavoritesService().removeFavorite(widget.listing.id)
-        : await FavoritesService().addFavorite(widget.listing);
+        ? await FavoritesService().removeFavorite(_listing.id)
+        : await FavoritesService().addFavorite(_listing);
 
     if (!mounted) {
       return;
@@ -96,6 +144,61 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     );
   }
 
+  Future<String?> _submitInquiry(
+    String message,
+    String preferredContactMethod,
+  ) async {
+    setState(() {
+      _isSendingInquiry = true;
+    });
+
+    try {
+      await InquiryService().sendInquiry(
+        listingId: _listing.id,
+        message: message,
+        preferredContactMethod: preferredContactMethod,
+        listing: _listing,
+      );
+      return null;
+    } catch (error) {
+      return error is FormatException
+          ? error.message
+          : _apiClient.mapError(error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingInquiry = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openInquiryComposer() async {
+    if (!AuthService().isLoggedIn) {
+      _showSnackBar('Please log in to send an inquiry.');
+      return;
+    }
+
+    final submitted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return _InquiryComposerSheet(
+          listingTitle: _listing.title,
+          isSubmitting: _isSendingInquiry,
+          onSubmit: _submitInquiry,
+        );
+      },
+    );
+
+    if (!mounted || submitted != true) {
+      return;
+    }
+
+    _showSnackBar('Inquiry sent!');
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -103,20 +206,27 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         backgroundColor: kNavy,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        duration: const Duration(seconds: 1),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final listing = widget.listing;
+    final listing = _listing;
+    final detailRows = <_DetailEntry>[
+      _DetailEntry(label: 'Category', value: listing.category),
+      _DetailEntry(label: 'Condition', value: listing.condition),
+      if (listing.campusLocation.trim().isNotEmpty)
+        _DetailEntry(label: 'Campus', value: listing.campusLocation),
+      _DetailEntry(label: 'Seller', value: listing.seller),
+    ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
-        slivers: [
+        slivers: <Widget>[
           SliverAppBar(
             expandedHeight: 260,
             pinned: true,
@@ -132,7 +242,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                 child: const Icon(Icons.arrow_back, color: kWhite, size: 20),
               ),
             ),
-            actions: [
+            actions: <Widget>[
               Container(
                 margin: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -161,28 +271,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [kDarkNavy, listing.color],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                child: listing.imageFile != null
-                    ? Image.file(
-                        listing.imageFile!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      )
-                    : Center(
-                        child: Icon(
-                          listing.icon,
-                          size: 100,
-                          color: kNavy.withValues(alpha: 0.25),
-                        ),
-                      ),
+              background: _ListingHeroGallery(
+                listing: listing,
+                images: _detailImages,
+                activeImageIndex: _activeImageIndex,
+                onPageChanged: (index) {
+                  setState(() => _activeImageIndex = index);
+                },
               ),
             ),
           ),
@@ -191,10 +286,37 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: <Widget>[
+                  if (_isLoadingDetail) ...<Widget>[
+                    const LinearProgressIndicator(
+                      color: kGold,
+                      backgroundColor: Color(0xFFDCE4FF),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_detailErrorMessage != null) ...<Widget>[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF8E1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFF5C518)),
+                      ),
+                      child: const Text(
+                        'Showing the available listing summary while full details are unavailable.',
+                        style: TextStyle(
+                          color: kNavy,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    children: <Widget>[
                       Expanded(
                         child: Text(
                           listing.title,
@@ -229,7 +351,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                   ),
                   const SizedBox(height: 12),
                   Row(
-                    children: [
+                    children: <Widget>[
                       _Tag(
                         label: listing.category,
                         bgColor: kGold,
@@ -238,16 +360,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       const SizedBox(width: 8),
                       _Tag(
                         label: listing.condition,
-                        bgColor: listing.condition == 'New'
-                            ? Colors.green.shade100
-                            : listing.condition == 'Good'
-                            ? Colors.blue.shade100
-                            : Colors.orange.shade100,
-                        textColor: listing.condition == 'New'
-                            ? Colors.green.shade700
-                            : listing.condition == 'Good'
-                            ? Colors.blue.shade700
-                            : Colors.orange.shade700,
+                        bgColor: _conditionBackgroundColor(listing.condition),
+                        textColor: _conditionTextColor(listing.condition),
                       ),
                     ],
                   ),
@@ -257,7 +371,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     decoration: BoxDecoration(
                       color: kWhite,
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
+                      boxShadow: <BoxShadow>[
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 8,
@@ -266,7 +380,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       ],
                     ),
                     child: Row(
-                      children: [
+                      children: <Widget>[
                         CircleAvatar(
                           radius: 22,
                           backgroundColor: kGold,
@@ -283,7 +397,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                            children: <Widget>[
                               Text(
                                 listing.seller,
                                 style: const TextStyle(
@@ -312,15 +426,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                             color: const Color(0xFFF4F6FF),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.star_rounded,
-                                color: kGold,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 3),
-                              const Text(
+                          child: const Row(
+                            children: <Widget>[
+                              Icon(Icons.star_rounded, color: kGold, size: 14),
+                              SizedBox(width: 3),
+                              Text(
                                 '4.8',
                                 style: TextStyle(
                                   color: kNavy,
@@ -350,7 +460,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     decoration: BoxDecoration(
                       color: kWhite,
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
+                      boxShadow: <BoxShadow>[
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 8,
@@ -381,7 +491,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     decoration: BoxDecoration(
                       color: kWhite,
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
+                      boxShadow: <BoxShadow>[
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 8,
@@ -390,18 +500,16 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       ],
                     ),
                     child: Column(
-                      children: [
-                        _DetailRow(label: 'Category', value: listing.category),
-                        _DetailRow(
-                          label: 'Condition',
-                          value: listing.condition,
-                        ),
-                        _DetailRow(
-                          label: 'Seller',
-                          value: listing.seller,
-                          isLast: true,
-                        ),
-                      ],
+                      children: List<Widget>.generate(detailRows.length, (
+                        index,
+                      ) {
+                        final detail = detailRows[index];
+                        return _DetailRow(
+                          label: detail.label,
+                          value: detail.value,
+                          isLast: index == detailRows.length - 1,
+                        );
+                      }),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -409,17 +517,21 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        InquiryService().sendInquiry(
-                          listingId: listing.id,
-                          listingTitle: listing.title,
-                          listingPrice: listing.price,
-                          listingCategory: listing.category,
-                          message: 'Is this still available?',
-                        );
-                        _showSnackBar('Inquiry sent!');
-                      },
-                      icon: const Icon(Icons.send_rounded, size: 18),
+                      onPressed: _isSendingInquiry
+                          ? null
+                          : _openInquiryComposer,
+                      icon: _isSendingInquiry
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  kGold,
+                                ),
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded, size: 18),
                       label: const Text(
                         'Send Inquiry',
                         style: TextStyle(
@@ -446,18 +558,398 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       ),
     );
   }
+
+  Color _conditionBackgroundColor(String condition) {
+    switch (condition) {
+      case 'Brand New':
+        return Colors.green.shade100;
+      case 'Pre-owned':
+        return Colors.blue.shade100;
+      default:
+        return Colors.orange.shade100;
+    }
+  }
+
+  Color _conditionTextColor(String condition) {
+    switch (condition) {
+      case 'Brand New':
+        return Colors.green.shade700;
+      case 'Pre-owned':
+        return Colors.blue.shade700;
+      default:
+        return Colors.orange.shade700;
+    }
+  }
+}
+
+class _ListingHeroGallery extends StatelessWidget {
+  const _ListingHeroGallery({
+    required this.listing,
+    required this.images,
+    required this.activeImageIndex,
+    required this.onPageChanged,
+  });
+
+  final Listing listing;
+  final List<ListingImageAsset> images;
+  final int activeImageIndex;
+  final ValueChanged<int> onPageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: <Color>[kDarkNavy, listing.color],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: <Widget>[
+          if (images.isNotEmpty)
+            PageView.builder(
+              itemCount: images.length,
+              onPageChanged: onPageChanged,
+              itemBuilder: (context, index) {
+                final image = images[index];
+                return Image.network(
+                  image.imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      _ListingFallbackArt(listing: listing),
+                );
+              },
+            )
+          else if (listing.imageFile != null)
+            Image.file(
+              listing.imageFile!,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+            )
+          else
+            _ListingFallbackArt(listing: listing),
+          if (images.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 18,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List<Widget>.generate(images.length, (index) {
+                  final isActive = index == activeImageIndex;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: isActive ? 18 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: isActive ? kWhite : kWhite.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ListingFallbackArt extends StatelessWidget {
+  const _ListingFallbackArt({required this.listing});
+
+  final Listing listing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Icon(
+        listing.icon,
+        size: 100,
+        color: kNavy.withValues(alpha: 0.25),
+      ),
+    );
+  }
+}
+
+typedef _InquirySubmitCallback =
+    Future<String?> Function(String message, String preferredContactMethod);
+
+class _InquiryComposerSheet extends StatefulWidget {
+  const _InquiryComposerSheet({
+    required this.listingTitle,
+    required this.isSubmitting,
+    required this.onSubmit,
+  });
+
+  final String listingTitle;
+  final bool isSubmitting;
+  final _InquirySubmitCallback onSubmit;
+
+  @override
+  State<_InquiryComposerSheet> createState() => _InquiryComposerSheetState();
+}
+
+class _InquiryComposerSheetState extends State<_InquiryComposerSheet> {
+  final TextEditingController _messageController = TextEditingController(
+    text: 'Is this still available?',
+  );
+
+  String _selectedContactMethod = 'in_app';
+  String? _errorMessage;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSubmit() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty) {
+      setState(() => _errorMessage = 'Please enter a message.');
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    final error = await widget.onSubmit(message, _selectedContactMethod);
+    if (!mounted) {
+      return;
+    }
+
+    if (error != null) {
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = error;
+      });
+      return;
+    }
+
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 12, 12, bottomInset + 12),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: kWhite,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  const Expanded(
+                    child: Text(
+                      'Send Inquiry',
+                      style: TextStyle(
+                        color: kNavy,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: kNavy),
+                  ),
+                ],
+              ),
+              Text(
+                widget.listingTitle,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Preferred Contact',
+                style: TextStyle(
+                  color: kNavy,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _ContactChoice(
+                    label: 'In-app',
+                    value: 'in_app',
+                    selectedValue: _selectedContactMethod,
+                    onSelected: (value) {
+                      setState(() => _selectedContactMethod = value);
+                    },
+                  ),
+                  _ContactChoice(
+                    label: 'Email',
+                    value: 'email',
+                    selectedValue: _selectedContactMethod,
+                    onSelected: (value) {
+                      setState(() => _selectedContactMethod = value);
+                    },
+                  ),
+                  _ContactChoice(
+                    label: 'Phone',
+                    value: 'phone',
+                    selectedValue: _selectedContactMethod,
+                    onSelected: (value) {
+                      setState(() => _selectedContactMethod = value);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Message',
+                style: TextStyle(
+                  color: kNavy,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4F6FF),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: TextField(
+                  controller: _messageController,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Ask about availability, meetup, or condition details.',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.all(14),
+                  ),
+                ),
+              ),
+              if (_errorMessage != null) ...<Widget>[
+                const SizedBox(height: 12),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting || widget.isSubmitting
+                      ? null
+                      : _handleSubmit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kNavy,
+                    foregroundColor: kGold,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: _isSubmitting || widget.isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            valueColor: AlwaysStoppedAnimation<Color>(kGold),
+                          ),
+                        )
+                      : const Text(
+                          'Send Inquiry',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ContactChoice extends StatelessWidget {
+  const _ContactChoice({
+    required this.label,
+    required this.value,
+    required this.selectedValue,
+    required this.onSelected,
+  });
+
+  final String label;
+  final String value;
+  final String selectedValue;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = value == selectedValue;
+
+    return GestureDetector(
+      onTap: () => onSelected(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? kNavy : const Color(0xFFF4F6FF),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? kGold : kNavy,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Tag extends StatelessWidget {
-  final String label;
-  final Color bgColor;
-  final Color textColor;
-
   const _Tag({
     required this.label,
     required this.bgColor,
     required this.textColor,
   });
+
+  final String label;
+  final Color bgColor;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -479,16 +971,23 @@ class _Tag extends StatelessWidget {
   }
 }
 
-class _DetailRow extends StatelessWidget {
+class _DetailEntry {
+  const _DetailEntry({required this.label, required this.value});
+
   final String label;
   final String value;
-  final bool isLast;
+}
 
+class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
     required this.value,
     this.isLast = false,
   });
+
+  final String label;
+  final String value;
+  final bool isLast;
 
   @override
   Widget build(BuildContext context) {
@@ -501,14 +1000,17 @@ class _DetailRow extends StatelessWidget {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
+        children: <Widget>[
           Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-          Text(
-            value,
-            style: const TextStyle(
-              color: kNavy,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: kNavy,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

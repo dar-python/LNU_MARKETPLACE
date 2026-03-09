@@ -7,7 +7,7 @@ void main() {
     final listing = Listing.fromApi(<String, dynamic>{
       'id': 11,
       'user_id': 25,
-      'category_id': 3,
+      'category_id': 2,
       'title': 'Physics Book',
       'description': 'Used for one semester',
       'price': '120',
@@ -18,11 +18,11 @@ void main() {
 
     expect(listing.id, 11);
     expect(listing.userId, 25);
-    expect(listing.categoryId, 3);
+    expect(listing.categoryId, 2);
     expect(listing.title, 'Physics Book');
     expect(listing.price, 'P120.00');
-    expect(listing.condition, 'New');
-    expect(listing.category, 'Category');
+    expect(listing.condition, 'Brand New');
+    expect(listing.category, 'Books');
     expect(listing.seller, 'LNU Seller');
     expect(listing.listingStatus, 'available');
     expect(listing.campusLocation, 'Main Gate');
@@ -34,13 +34,13 @@ void main() {
       const fallbackListing = Listing(
         id: 11,
         userId: 25,
-        categoryId: 3,
+        categoryId: 2,
         listingStatus: 'available',
         campusLocation: 'Main Gate',
         title: 'Physics Book',
         price: 'P120.00',
         category: 'Books',
-        condition: 'Good',
+        condition: 'Pre-owned',
         description: 'Used for one semester',
         seller: 'Jane Doe',
         sellerAvatar: 'J',
@@ -51,7 +51,7 @@ void main() {
       final listing = Listing.fromApiWithFallback(<String, dynamic>{
         'id': 11,
         'user_id': 25,
-        'category_id': 3,
+        'category_id': 2,
         'title': 'Physics Book',
         'price': '120.00',
         'listing_status': 'available',
@@ -59,7 +59,7 @@ void main() {
 
       expect(listing.category, 'Books');
       expect(listing.seller, 'Jane Doe');
-      expect(listing.condition, 'Good');
+      expect(listing.condition, 'Pre-owned');
       expect(listing.icon, Icons.menu_book_rounded);
     },
   );
@@ -94,10 +94,55 @@ void main() {
     expect(collection.listings, hasLength(1));
     expect(collection.listings.single.id, 7);
     expect(collection.listings.single.price, 'P75.50');
-    expect(collection.listings.single.condition, 'Good');
+    expect(collection.listings.single.condition, 'Pre-owned');
     expect(collection.pagination.currentPage, 2);
     expect(collection.pagination.perPage, 10);
     expect(collection.pagination.total, 12);
     expect(collection.pagination.lastPage, 2);
+  });
+
+  test('Listing detail parses nested category and images from envelope', () {
+    final detail = ListingDetail.fromEnvelope(<String, dynamic>{
+      'success': true,
+      'message': 'Listing retrieved successfully.',
+      'data': <String, dynamic>{
+        'listing': <String, dynamic>{
+          'id': 9,
+          'user_id': 5,
+          'category_id': 1,
+          'title': 'Tablet',
+          'description': 'Lightly used tablet',
+          'price': '9500.00',
+          'item_condition': 'preowned',
+          'listing_status': 'available',
+          'campus_location': 'LNU Main Campus',
+          'category': <String, dynamic>{
+            'id': 1,
+            'name': 'Electronics',
+            'slug': 'electronics',
+          },
+          'images': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 77,
+              'image_path': 'listings/9/cover.jpg',
+              'sort_order': 0,
+              'is_primary': true,
+            },
+          ],
+        },
+      },
+      'trace_id': 'trace-123',
+    });
+
+    expect(detail.listing.category, 'Electronics');
+    expect(detail.listing.condition, 'Pre-owned');
+    expect(detail.images, hasLength(1));
+    expect(detail.images.single.id, 77);
+    expect(detail.images.single.imagePath, 'listings/9/cover.jpg');
+    expect(
+      detail.images.single.imageUrl,
+      contains('/storage/listings/9/cover.jpg'),
+    );
+    expect(detail.images.single.isPrimary, isTrue);
   });
 }

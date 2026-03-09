@@ -1,127 +1,145 @@
 import 'Inquiry_model.dart';
 import 'auth_service.dart';
+import 'core/network/api_client.dart';
+import 'listing_model_page.dart';
 
-// ─── InquiryService (Singleton) ───────────────────────────────────────────────
 class InquiryService {
   static final InquiryService _instance = InquiryService._internal();
+
   factory InquiryService() => _instance;
+
   InquiryService._internal();
 
-  final List<Inquiry> _inquiries = [
-    // ── Sample / Dummy Inquiries ──────────────────────────────────────────
-    Inquiry(
-      id: 1,
-      listingId: 0,
-      listingTitle: 'Scientific Calculator',
-      listingPrice: '₱350.00',
-      listingCategory: 'Gadgets',
-      buyerName: 'Maria Santos',
-      buyerAvatar: 'M',
-      buyerStudentId: '2021-00123',
-      message: 'Is this still available?',
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      status: InquiryStatus.pending,
-    ),
-    Inquiry(
-      id: 2,
-      listingId: 1,
-      listingTitle: 'Engineering Mathematics Book',
-      listingPrice: '₱250.00',
-      listingCategory: 'Books',
-      buyerName: 'Juan Dela Cruz',
-      buyerAvatar: 'J',
-      buyerStudentId: '2022-00456',
-      message: 'Can we meet at the library?',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      status: InquiryStatus.accepted,
-    ),
-    Inquiry(
-      id: 3,
-      listingId: 2,
-      listingTitle: 'PE Uniform (Large)',
-      listingPrice: '₱180.00',
-      listingCategory: 'Uniforms',
-      buyerName: 'Ana Reyes',
-      buyerAvatar: 'A',
-      buyerStudentId: '2023-00789',
-      message: 'What size is this exactly?',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      status: InquiryStatus.declined,
-    ),
-  ];
+  final ApiClient _apiClient = ApiClient();
+  final BackendListingAdapter _listingAdapter = BackendListingAdapter.instance;
 
-  // ── Getters ───────────────────────────────────────────────────────────────
+  Future<List<Inquiry>> fetchSentInquiries({int perPage = 50}) async {
+    final response = await _apiClient.dio.get(
+      '/api/v1/inquiries/sent',
+      queryParameters: <String, dynamic>{'per_page': perPage},
+    );
 
-  /// Inquiries received by the current user (as a seller)
-  List<Inquiry> get receivedInquiries {
-    final user = AuthService().currentUser;
-    if (user == null) return [];
-    // In a real app, filter by seller. For now return sample received inquiries.
-    return List.unmodifiable(_inquiries);
+    return _extractInquiryList(response.data);
   }
 
-  /// Inquiries sent by the current user (as a buyer)
-  List<Inquiry> get sentInquiries {
-    final user = AuthService().currentUser;
-    if (user == null) return [];
-    final studentId = user['studentId'] as String;
-    return List.unmodifiable(
-      _inquiries.where((i) => i.buyerStudentId == studentId).toList(),
+  Future<List<Inquiry>> fetchReceivedInquiries({int perPage = 50}) async {
+    final response = await _apiClient.dio.get(
+      '/api/v1/inquiries/received',
+      queryParameters: <String, dynamic>{'per_page': perPage},
+    );
+
+    return _extractInquiryList(response.data);
+  }
+
+  Future<Inquiry> fetchInquiryDetail(int inquiryId, {Inquiry? fallback}) async {
+    final response = await _apiClient.dio.get('/api/v1/inquiries/$inquiryId');
+    final rawInquiry = _apiClient.extractDataItemMap(response.data, 'inquiry');
+    if (rawInquiry == null) {
+      throw const FormatException('Invalid inquiry payload.');
+    }
+
+    return Inquiry.fromApi(
+      rawInquiry,
+      fallbackListing: _fallbackListingFromInquiry(fallback),
+      listingAdapter: _listingAdapter,
     );
   }
 
-  /// Count of pending received inquiries
-  int get pendingCount =>
-      receivedInquiries.where((i) => i.status == InquiryStatus.pending).length;
-
-  // ── Actions ───────────────────────────────────────────────────────────────
-
-  /// Send a new inquiry for a listing
-  void sendInquiry({
+  Future<Inquiry> sendInquiry({
     required int listingId,
-    required String listingTitle,
-    required String listingPrice,
-    required String listingCategory,
-    String message = '',
-  }) {
-    final user = AuthService().currentUser;
-    if (user == null) return;
+    required String message,
+    required String preferredContactMethod,
+    Listing? listing,
+  }) async {
+    if (!AuthService().isLoggedIn) {
+      throw const FormatException('Please log in to send an inquiry.');
+    }
 
-    final name = user['name'] as String? ?? 'Unknown';
-    final studentId = user['studentId'] as String? ?? '';
+    final response = await _apiClient.dio.post(
+      '/api/v1/listings/$listingId/inquiries',
+      data: <String, dynamic>{
+        'message': message.trim(),
+        'preferred_contact_method': preferredContactMethod,
+      },
+    );
 
-    _inquiries.insert(
-      0,
-      Inquiry(
-        id: DateTime.now().millisecondsSinceEpoch,
-        listingId: listingId,
-        listingTitle: listingTitle,
-        listingPrice: listingPrice,
-        listingCategory: listingCategory,
-        buyerName: name,
-        buyerAvatar: name.isNotEmpty ? name[0].toUpperCase() : '?',
-        buyerStudentId: studentId,
-        message: message,
-        createdAt: DateTime.now(),
-        status: InquiryStatus.pending,
-      ),
+    final rawInquiry = _apiClient.extractDataItemMap(response.data, 'inquiry');
+    if (rawInquiry == null) {
+      throw const FormatException('Invalid inquiry payload.');
+    }
+
+    return Inquiry.fromApi(
+      rawInquiry,
+      fallbackListing: listing,
+      listingAdapter: _listingAdapter,
     );
   }
 
-  /// Accept an inquiry (seller action)
-  void acceptInquiry(int id) {
-    final inquiry = _inquiries.firstWhere((i) => i.id == id);
-    inquiry.status = InquiryStatus.accepted;
+  Future<Inquiry> decideInquiry({
+    required int inquiryId,
+    required InquiryStatus decision,
+    Inquiry? fallback,
+  }) async {
+    final response = await _apiClient.dio.patch(
+      '/api/v1/inquiries/$inquiryId/decision',
+      data: <String, dynamic>{'status': _decisionStatus(decision)},
+    );
+
+    final rawInquiry = _apiClient.extractDataItemMap(response.data, 'inquiry');
+    if (rawInquiry == null) {
+      throw const FormatException('Invalid inquiry payload.');
+    }
+
+    return Inquiry.fromApi(
+      rawInquiry,
+      fallbackListing: _fallbackListingFromInquiry(fallback),
+      listingAdapter: _listingAdapter,
+    );
   }
 
-  /// Decline an inquiry (seller action)
-  void declineInquiry(int id) {
-    final inquiry = _inquiries.firstWhere((i) => i.id == id);
-    inquiry.status = InquiryStatus.declined;
+  List<Inquiry> _extractInquiryList(dynamic body) {
+    final rawInquiries = _apiClient.extractDataItemList(body, 'inquiries');
+    if (rawInquiries == null) {
+      throw const FormatException('Invalid inquiries payload.');
+    }
+
+    return rawInquiries
+        .map(
+          (rawInquiry) =>
+              Inquiry.fromApi(rawInquiry, listingAdapter: _listingAdapter),
+        )
+        .toList();
   }
 
-  /// Delete an inquiry
-  void deleteInquiry(int id) {
-    _inquiries.removeWhere((i) => i.id == id);
+  Listing? _fallbackListingFromInquiry(Inquiry? inquiry) {
+    if (inquiry == null) {
+      return null;
+    }
+
+    return _listingAdapter.cached(inquiry.listingId) ??
+        Listing(
+          id: inquiry.listingId,
+          title: inquiry.listingTitle,
+          price: inquiry.listingPrice,
+          category: inquiry.listingCategory,
+          condition: 'Pre-owned',
+          description: '',
+          seller: inquiry.recipientName,
+          sellerAvatar: inquiry.recipientAvatar,
+          icon: categoryIcon(inquiry.listingCategory),
+          color: categoryColor(inquiry.listingCategory),
+          listingStatus: inquiry.listingStatus,
+        );
+  }
+
+  String _decisionStatus(InquiryStatus decision) {
+    switch (decision) {
+      case InquiryStatus.accepted:
+        return 'accepted';
+      case InquiryStatus.declined:
+        return 'declined';
+      case InquiryStatus.pending:
+        return 'pending';
+    }
   }
 }
