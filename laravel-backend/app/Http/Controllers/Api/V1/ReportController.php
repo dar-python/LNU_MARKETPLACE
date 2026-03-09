@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ModerateReportActionRequest;
+use App\Http\Requests\ReportDashboardRequest;
 use App\Http\Requests\ReportIndexRequest;
 use App\Http\Requests\ShowReportRequest;
 use App\Http\Requests\StoreReportRequest;
@@ -17,10 +18,12 @@ use App\Models\UserReport;
 use App\Models\UserReportStatusHistory;
 use App\Support\ApiResponse;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -35,6 +38,15 @@ class ReportController extends Controller
         'available',
         'reserved',
         'sold',
+    ];
+
+    /**
+     * @var list<string>
+     */
+    private const OPEN_REPORT_STATUSES = [
+        PostReport::STATUS_SUBMITTED,
+        PostReport::STATUS_PENDING,
+        PostReport::STATUS_UNDER_REVIEW,
     ];
 
     public function storeListing(StoreReportRequest $request, Listing $listing): JsonResponse
@@ -221,6 +233,78 @@ class ReportController extends Controller
         ]);
     }
 
+    public function dashboardSummary(ReportDashboardRequest $request): JsonResponse
+    {
+        $filters = $this->normalizeDashboardFilters($request->validated());
+
+        $listingCount = $this->includesListingReports($filters)
+            ? $this->dashboardPostReportSummaryQuery($filters)->count()
+            : 0;
+        $userCount = $this->includesUserReports($filters)
+            ? $this->dashboardUserReportSummaryQuery($filters)->count()
+            : 0;
+
+        $byStatus = array_fill_keys(PostReport::STATUSES, 0);
+        $byReasonCategory = array_fill_keys(PostReport::REASON_CATEGORIES, 0);
+
+        foreach ($this->dashboardGroupedCounts($this->dashboardPostReportSummaryQuery($filters), 'status') as $status => $count) {
+            $byStatus[$status] += $count;
+        }
+
+        foreach ($this->dashboardGroupedCounts($this->dashboardUserReportSummaryQuery($filters), 'status') as $status => $count) {
+            $byStatus[$status] += $count;
+        }
+
+        foreach ($this->dashboardGroupedCounts($this->dashboardPostReportSummaryQuery($filters), 'reason_category') as $reasonCategory => $count) {
+            $byReasonCategory[$reasonCategory] += $count;
+        }
+
+        foreach ($this->dashboardGroupedCounts($this->dashboardUserReportSummaryQuery($filters), 'reason_category') as $reasonCategory => $count) {
+            $byReasonCategory[$reasonCategory] += $count;
+        }
+
+        return ApiResponse::success('Report dashboard summary retrieved successfully.', [
+            'summary' => [
+                'overall' => [
+                    'total_reports' => $listingCount + $userCount,
+                    'total_listing_reports' => $listingCount,
+                    'total_user_reports' => $userCount,
+                    'open_reports' => array_sum(array_intersect_key($byStatus, array_flip(self::OPEN_REPORT_STATUSES))),
+                ],
+                'by_status' => $byStatus,
+                'by_type' => [
+                    'listing' => $listingCount,
+                    'user' => $userCount,
+                ],
+                'by_reason_category' => $byReasonCategory,
+            ],
+        ]);
+    }
+
+    public function dashboardReports(ReportDashboardRequest $request): JsonResponse
+    {
+        $filters = $this->normalizeDashboardFilters($request->validated());
+        $perPage = (int) ($filters['per_page'] ?? 10);
+        $sortBy = (string) ($filters['sort_by'] ?? 'created_at');
+        $sortDir = (string) ($filters['sort_dir'] ?? 'desc');
+
+        $query = $this->dashboardReportsQuery($filters);
+
+        $paginator = DB::query()
+            ->fromSub($query, 'dashboard_reports')
+            ->orderBy($sortBy, $sortDir)
+            ->orderBy('id', $sortDir)
+            ->paginate($perPage);
+
+        return ApiResponse::success('Reports retrieved successfully.', [
+            'reports' => array_map(
+                fn (object $report): array => $this->serializeDashboardReport($report),
+                $paginator->items()
+            ),
+            'meta' => $this->paginationMeta($paginator),
+        ]);
+    }
+
     private function createListingReport(StoreReportRequest $request, Listing $listing): PostReport
     {
         $validated = $request->validated();
@@ -303,6 +387,249 @@ class ReportController extends Controller
         }
 
         return $report;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function normalizeDashboardFilters(array $filters): array
+    {
+        if (isset($filters['date_from']) && is_string($filters['date_from'])) {
+            $filters['date_from'] = Carbon::parse($filters['date_from'])->startOfDay();
+        }
+
+        if (isset($filters['date_to']) && is_string($filters['date_to'])) {
+            $filters['date_to'] = Carbon::parse($filters['date_to'])->endOfDay();
+        }
+
+        return $filters;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function includesListingReports(array $filters): bool
+    {
+        return ($filters['type'] ?? null) !== 'user';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function includesUserReports(array $filters): bool
+    {
+        return ($filters['type'] ?? null) !== 'listing';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function dashboardReportsQuery(array $filters): QueryBuilder
+    {
+        $queries = [];
+
+        if ($this->includesListingReports($filters)) {
+            $queries[] = $this->dashboardPostReportListQuery($filters);
+        }
+
+        if ($this->includesUserReports($filters)) {
+            $queries[] = $this->dashboardUserReportListQuery($filters);
+        }
+
+        $combined = array_shift($queries);
+
+        if (! $combined instanceof QueryBuilder) {
+            throw new \RuntimeException('Unable to build dashboard reports query.');
+        }
+
+        foreach ($queries as $query) {
+            $combined->unionAll($query);
+        }
+
+        return $combined;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function dashboardPostReportSummaryQuery(array $filters): QueryBuilder
+    {
+        if (! $this->includesListingReports($filters)) {
+            return DB::table('post_reports')->whereRaw('1 = 0');
+        }
+
+        $query = DB::table('post_reports')
+            ->leftJoin('listings', 'listings.id', '=', 'post_reports.listing_id');
+
+        return $this->applyDashboardPostReportFilters($query, $filters);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function dashboardUserReportSummaryQuery(array $filters): QueryBuilder
+    {
+        if (! $this->includesUserReports($filters)) {
+            return DB::table('user_reports')->whereRaw('1 = 0');
+        }
+
+        $query = DB::table('user_reports')
+            ->leftJoin('users as reported_users', 'reported_users.id', '=', 'user_reports.reported_user_id');
+
+        return $this->applyDashboardUserReportFilters($query, $filters);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function dashboardPostReportListQuery(array $filters): QueryBuilder
+    {
+        $query = DB::table('post_reports')
+            ->leftJoin('listings', 'listings.id', '=', 'post_reports.listing_id')
+            ->select([
+                'post_reports.id',
+                DB::raw("'listing' as type"),
+                'post_reports.status',
+                'post_reports.reason_category',
+                'post_reports.description',
+                'post_reports.reporter_user_id',
+                'post_reports.evidence_path',
+                'post_reports.created_at',
+                'post_reports.updated_at',
+                'post_reports.listing_id',
+                DB::raw('NULL as reported_user_id'),
+                'listings.title as listing_title',
+                'listings.user_id as listing_owner_id',
+                DB::raw('NULL as reported_user_first_name'),
+                DB::raw('NULL as reported_user_middle_name'),
+                DB::raw('NULL as reported_user_last_name'),
+            ]);
+
+        return $this->applyDashboardPostReportFilters($query, $filters);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function dashboardUserReportListQuery(array $filters): QueryBuilder
+    {
+        $query = DB::table('user_reports')
+            ->leftJoin('users as reported_users', 'reported_users.id', '=', 'user_reports.reported_user_id')
+            ->select([
+                'user_reports.id',
+                DB::raw("'user' as type"),
+                'user_reports.status',
+                'user_reports.reason_category',
+                'user_reports.description',
+                'user_reports.reporter_user_id',
+                'user_reports.evidence_path',
+                'user_reports.created_at',
+                'user_reports.updated_at',
+                DB::raw('NULL as listing_id'),
+                'user_reports.reported_user_id',
+                DB::raw('NULL as listing_title'),
+                DB::raw('NULL as listing_owner_id'),
+                'reported_users.first_name as reported_user_first_name',
+                'reported_users.middle_name as reported_user_middle_name',
+                'reported_users.last_name as reported_user_last_name',
+            ]);
+
+        return $this->applyDashboardUserReportFilters($query, $filters);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, int>
+     */
+    private function dashboardGroupedCounts(QueryBuilder $query, string $column): array
+    {
+        $results = $query
+            ->select($column, DB::raw('COUNT(*) as aggregate'))
+            ->groupBy($column)
+            ->pluck('aggregate', $column);
+
+        return collect($results)
+            ->mapWithKeys(fn (mixed $count, mixed $key): array => [(string) $key => (int) $count])
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyDashboardPostReportFilters(QueryBuilder $query, array $filters): QueryBuilder
+    {
+        $this->applyDashboardCommonFilters($query, 'post_reports', $filters);
+
+        $search = $filters['search'] ?? null;
+
+        if (is_string($search) && $search !== '') {
+            $query->where(function (QueryBuilder $builder) use ($search): void {
+                if (ctype_digit($search)) {
+                    $builder->where('post_reports.id', (int) $search)
+                        ->orWhere('listings.title', 'like', '%'.$search.'%');
+
+                    return;
+                }
+
+                $builder->where('listings.title', 'like', '%'.$search.'%');
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyDashboardUserReportFilters(QueryBuilder $query, array $filters): QueryBuilder
+    {
+        $this->applyDashboardCommonFilters($query, 'user_reports', $filters);
+
+        $search = $filters['search'] ?? null;
+
+        if (is_string($search) && $search !== '') {
+            $query->where(function (QueryBuilder $builder) use ($search): void {
+                if (ctype_digit($search)) {
+                    $builder->where('user_reports.id', (int) $search)
+                        ->orWhere('reported_users.first_name', 'like', '%'.$search.'%')
+                        ->orWhere('reported_users.middle_name', 'like', '%'.$search.'%')
+                        ->orWhere('reported_users.last_name', 'like', '%'.$search.'%')
+                        ->orWhere('reported_users.email', 'like', '%'.$search.'%');
+
+                    return;
+                }
+
+                $builder
+                    ->where('reported_users.first_name', 'like', '%'.$search.'%')
+                    ->orWhere('reported_users.middle_name', 'like', '%'.$search.'%')
+                    ->orWhere('reported_users.last_name', 'like', '%'.$search.'%')
+                    ->orWhere('reported_users.email', 'like', '%'.$search.'%');
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     */
+    private function applyDashboardCommonFilters(QueryBuilder $query, string $table, array $filters): void
+    {
+        if (isset($filters['status']) && is_string($filters['status'])) {
+            $query->where($table.'.status', $filters['status']);
+        }
+
+        if (isset($filters['reason_category']) && is_string($filters['reason_category'])) {
+            $query->where($table.'.reason_category', $filters['reason_category']);
+        }
+
+        if (isset($filters['date_from']) && $filters['date_from'] instanceof Carbon) {
+            $query->where($table.'.created_at', '>=', $filters['date_from']);
+        }
+
+        if (isset($filters['date_to']) && $filters['date_to'] instanceof Carbon) {
+            $query->where($table.'.created_at', '<=', $filters['date_to']);
+        }
     }
 
     private function postReportQuery(): Builder
@@ -831,6 +1158,43 @@ class ReportController extends Controller
     /**
      * @return array<string, mixed>
      */
+    private function serializeDashboardReport(object $report): array
+    {
+        $type = (string) $report->type;
+        $listingId = $report->listing_id !== null ? (int) $report->listing_id : null;
+        $reportedUserId = $report->reported_user_id !== null ? (int) $report->reported_user_id : null;
+
+        return [
+            'id' => (int) $report->id,
+            'type' => $type,
+            'listing_id' => $listingId,
+            'reported_user_id' => $reportedUserId,
+            'reporter_user_id' => (int) $report->reporter_user_id,
+            'reason_category' => (string) $report->reason_category,
+            'description' => (string) $report->description,
+            'status' => (string) $report->status,
+            'evidence_path' => $report->evidence_path,
+            'created_at' => $this->serializeTimestamp($report->created_at),
+            'updated_at' => $this->serializeTimestamp($report->updated_at),
+            'listing' => $type === 'listing' ? [
+                'id' => $listingId,
+                'user_id' => $report->listing_owner_id !== null ? (int) $report->listing_owner_id : null,
+                'title' => $report->listing_title,
+            ] : null,
+            'user' => $type === 'user' ? [
+                'id' => $reportedUserId,
+                'full_name' => $this->fullNameFromParts(
+                    $report->reported_user_first_name ?? null,
+                    $report->reported_user_middle_name ?? null,
+                    $report->reported_user_last_name ?? null
+                ),
+            ] : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function serializeUserReport(UserReport $report): array
     {
         return [
@@ -934,6 +1298,34 @@ class ReportController extends Controller
             'id' => $user->id,
             'full_name' => $user->fullName(),
         ];
+    }
+
+    private function serializeTimestamp(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return Carbon::parse($value)->toISOString();
+    }
+
+    private function fullNameFromParts(mixed $firstName, mixed $middleName, mixed $lastName): string
+    {
+        $firstName = is_string($firstName) ? $firstName : null;
+        $middleName = is_string($middleName) && $middleName !== '' ? $middleName : null;
+        $lastName = is_string($lastName) ? $lastName : null;
+
+        if ($middleName === null && $firstName !== null && $lastName !== null && $firstName === $lastName) {
+            return $firstName;
+        }
+
+        $parts = array_filter([
+            $firstName,
+            $middleName,
+            $lastName,
+        ], fn (mixed $value): bool => is_string($value) && $value !== '');
+
+        return implode(' ', $parts);
     }
 
     /**
