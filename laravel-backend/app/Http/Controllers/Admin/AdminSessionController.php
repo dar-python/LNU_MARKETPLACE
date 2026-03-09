@@ -76,12 +76,26 @@ class AdminSessionController extends Controller
     private function findUserForLogin(?string $email, ?string $studentId): ?User
     {
         $query = User::query()->with('roles');
+        $adminWebUsername = trim((string) config('lnu.admin_web_username', 'admin'));
 
         if (is_string($email) && $email !== '') {
             return $query->where('email', $email)->first();
         }
 
         if (is_string($studentId) && $studentId !== '') {
+            if ($adminWebUsername !== '' && strcasecmp($studentId, $adminWebUsername) === 0) {
+                return $query
+                    ->where(function ($builder): void {
+                        $builder
+                            ->where('role', 'admin')
+                            ->orWhereHas('roles', static function ($roleQuery): void {
+                                $roleQuery->where('code', 'admin');
+                            });
+                    })
+                    ->orderBy('id')
+                    ->first();
+            }
+
             return $query->where('student_id', $studentId)->first();
         }
 

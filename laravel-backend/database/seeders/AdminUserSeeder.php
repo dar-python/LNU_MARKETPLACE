@@ -24,9 +24,10 @@ class AdminUserSeeder extends Seeder
             ]
         );
 
-        $studentId = '2303838';
+        $studentId = (string) config('lnu.admin_seed_student_id', '2303838');
         $studentIdPrefix = substr($studentId, 0, 3);
-        $adminEmail = '2303838@lnu.edu.ph';
+        $adminEmail = $studentId.'@lnu.edu.ph';
+        $adminPassword = (string) config('lnu.admin_seed_password', 'admin123');
 
         StudentIdPrefix::query()->updateOrCreate(
             ['prefix' => $studentIdPrefix],
@@ -41,7 +42,7 @@ class AdminUserSeeder extends Seeder
             'student_id' => $studentId,
             'student_id_prefix' => $studentIdPrefix,
             'email' => $adminEmail,
-            'password' => bcrypt('password'),
+            'password' => bcrypt($adminPassword),
             'first_name' => 'Admin',
             'last_name' => 'Admin',
             'middle_name' => null,

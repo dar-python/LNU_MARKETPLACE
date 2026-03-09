@@ -9,6 +9,7 @@ use App\Models\ListingImage;
 use App\Models\Role;
 use App\Models\StudentIdPrefix;
 use App\Models\User;
+use Database\Seeders\AdminUserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Schema;
@@ -65,6 +66,22 @@ class AdminListingModerationWebTest extends TestCase
     {
         $this->get('/admin/listings')
             ->assertRedirect('/admin/login');
+    }
+
+    public function test_fixed_admin_username_and_password_can_sign_in(): void
+    {
+        $this->seed(AdminUserSeeder::class);
+
+        $this->post('/admin/login', [
+            'identifier' => 'admin',
+            'password' => 'admin123',
+        ])->assertRedirect('/admin/listings');
+
+        $this->assertAuthenticated();
+        $this->assertSame(
+            '2303838',
+            (string) auth()->user()?->student_id
+        );
     }
 
     public function test_non_admin_cannot_access_moderation_page_or_actions(): void

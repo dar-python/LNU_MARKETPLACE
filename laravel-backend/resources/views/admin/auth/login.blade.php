@@ -10,7 +10,7 @@
             @csrf
 
             <div class="field">
-                <label for="identifier">Email or student ID</label>
+                <label for="identifier">Username, email, or student ID</label>
                 <input
                     id="identifier"
                     name="identifier"
@@ -19,7 +19,7 @@
                     autocomplete="username"
                     required
                 >
-                <p class="helper">Use an existing admin email address or student ID.</p>
+                <p class="helper">You can sign in with the fixed admin username.</p>
             </div>
 
             <div class="field">

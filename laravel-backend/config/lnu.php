@@ -17,4 +17,7 @@ return [
     'student_id_prefix_length' => (int) env('LNU_STUDENT_ID_PREFIX_LENGTH', 3),
     'password_uncompromised' => filter_var(env('LNU_PASSWORD_UNCOMPROMISED', false), FILTER_VALIDATE_BOOL),
     'email_otp_expires_minutes' => (int) env('LNU_EMAIL_OTP_EXPIRES_MINUTES', 10),
+    'admin_web_username' => (string) env('LNU_ADMIN_WEB_USERNAME', 'admin'),
+    'admin_seed_student_id' => (string) env('LNU_ADMIN_STUDENT_ID', '2303838'),
+    'admin_seed_password' => (string) env('LNU_ADMIN_PASSWORD', 'admin123'),
 ];
