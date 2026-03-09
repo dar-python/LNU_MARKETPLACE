@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ListingBrowseRequest;
 use App\Models\Listing;
+use App\Models\ListingImage;
 use App\Support\ApiResponse;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -88,19 +89,7 @@ class ListingController extends Controller
             $sortDirection = $sortDirOverride;
         }
 
-        $query = Listing::query()
-            ->whereIn('listing_status', self::BROWSE_VISIBLE_STATUSES)
-            ->where('is_flagged', false);
-
-        if (Schema::hasColumn('listings', 'approved_at')) {
-            $query->whereNotNull('approved_at');
-        }
-
-        if (Schema::hasColumn('users', 'is_disabled')) {
-            $query->whereHas('user', static function (Builder $builder): void {
-                $builder->where('is_disabled', false);
-            });
-        }
+        $query = $this->visibleListingsQuery();
 
         if ($search !== '') {
             $searchPattern = '%'.$search.'%';
@@ -150,6 +139,26 @@ class ListingController extends Controller
                 'total' => $paginator->total(),
                 'last_page' => $paginator->lastPage(),
             ],
+        ]);
+    }
+
+    public function show(Listing $listing): JsonResponse
+    {
+        $listing = $this->visibleListingsQuery()
+            ->with([
+                'category:id,name,slug',
+                'listingImages' => static function ($query): void {
+                    $query
+                        ->select(['id', 'listing_id', 'image_path', 'sort_order', 'is_primary'])
+                        ->orderBy('sort_order')
+                        ->orderBy('id');
+                },
+            ])
+            ->whereKey($listing->id)
+            ->firstOrFail();
+
+        return ApiResponse::success('Listing retrieved successfully.', [
+            'listing' => $this->serializeListingDetail($listing),
         ]);
     }
 
@@ -277,5 +286,58 @@ class ListingController extends Controller
         }
 
         return $columns;
+    }
+
+    private function visibleListingsQuery(): Builder
+    {
+        $query = Listing::query()
+            ->whereIn('listing_status', self::BROWSE_VISIBLE_STATUSES)
+            ->where('is_flagged', false);
+
+        if (Schema::hasColumn('listings', 'approved_at')) {
+            $query->whereNotNull('approved_at');
+        }
+
+        if (Schema::hasColumn('users', 'is_disabled')) {
+            $query->whereHas('user', static function (Builder $builder): void {
+                $builder->where('is_disabled', false);
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeListingDetail(Listing $listing): array
+    {
+        return [
+            'id' => $listing->id,
+            'user_id' => (int) $listing->user_id,
+            'category_id' => (int) $listing->category_id,
+            'title' => $listing->title,
+            'description' => $listing->description,
+            'price' => $listing->price,
+            'item_condition' => (string) $listing->item_condition,
+            'listing_status' => (string) $listing->listing_status,
+            'campus_location' => $listing->campus_location,
+            'category' => $listing->category ? [
+                'id' => $listing->category->id,
+                'name' => $listing->category->name,
+                'slug' => $listing->category->slug,
+            ] : null,
+            'images' => array_map(
+                static fn (ListingImage $image): array => [
+                    'id' => $image->id,
+                    'image_path' => $image->image_path,
+                    'sort_order' => (int) $image->sort_order,
+                    'is_primary' => (bool) $image->is_primary,
+                ],
+                $listing->listingImages->all()
+            ),
+            'created_at' => $listing->created_at?->toISOString(),
+            'updated_at' => $listing->updated_at?->toISOString(),
+        ];
     }
 }

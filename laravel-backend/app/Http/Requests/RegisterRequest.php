@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\AllowedLnuEmail;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -35,24 +36,15 @@ class RegisterRequest extends FormRequest
                 Rule::unique('users', 'student_id'),
             ],
             'email' => [
-                'nullable',
+                'required',
+                'string',
                 'email',
+                'max:255',
                 Rule::unique('users', 'email'),
+                new AllowedLnuEmail,
                 function (string $attribute, mixed $value, \Closure $fail): void {
                     if (! is_string($value) || trim($value) === '') {
                         return;
-                    }
-
-                    $allowedDomains = config('lnu.allowed_email_domains', []);
-                    $normalizedDomains = array_values(array_filter(array_map(
-                        static fn ($domain) => Str::lower(trim((string) $domain)),
-                        is_array($allowedDomains) ? $allowedDomains : []
-                    )));
-
-                    $domain = Str::lower(Str::after((string) $value, '@'));
-
-                    if ($normalizedDomains === [] || ! in_array($domain, $normalizedDomains, true)) {
-                        $fail('The email domain is not allowed.');
                     }
 
                     if ((bool) config('lnu.enforce_email_student_id_match', true)) {
@@ -99,7 +91,7 @@ class RegisterRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'student_id.regex' => 'Student ID must be exactly 7 digits and start with an allowed prefix (210, 220, 230, 240, 250, 260, 270, 280).',
+            'student_id.regex' => 'Student ID must be valid.',
         ];
     }
 

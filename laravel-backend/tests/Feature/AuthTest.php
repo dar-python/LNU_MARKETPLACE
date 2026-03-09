@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Mail\EmailOtpMail;
+use App\Mail\PasswordResetOtpMail;
 use App\Models\Role;
 use App\Models\StudentIdPrefix;
 use App\Models\StudentVerification;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -28,6 +30,7 @@ class AuthTest extends TestCase
         config()->set('lnu.password_uncompromised', false);
         config()->set('lnu.email_otp_expires_minutes', 10);
         config()->set('sanctum.stateful', []);
+        config()->set('mail.default', 'array');
 
         StudentIdPrefix::query()->updateOrCreate(
             ['prefix' => '230'],
@@ -118,9 +121,55 @@ class AuthTest extends TestCase
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Validation failed.')
             ->assertJsonStructure([
-                'errors' => ['name', 'student_id', 'password'],
+                'errors' => ['name', 'student_id', 'email', 'password'],
                 'trace_id',
             ]);
+    }
+
+    public function test_register_fails_with_invalid_email_format(): void
+    {
+        $response = $this->postJson('/api/v1/auth/register', [
+            'name' => 'Malformed Email User',
+            'student_id' => '2301280',
+            'email' => 'not-an-email',
+            'password' => 'Safe!Pass123',
+            'password_confirmation' => 'Safe!Pass123',
+        ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['email'],
+                'trace_id',
+            ]);
+
+        $this->assertDatabaseMissing('users', [
+            'student_id' => '2301280',
+        ]);
+    }
+
+    public function test_register_rejects_non_lnu_email(): void
+    {
+        $response = $this->postJson('/api/v1/auth/register', [
+            'name' => 'External Email User',
+            'student_id' => '2301284',
+            'email' => '2301284@example.com',
+            'password' => 'Safe!Pass123',
+            'password_confirmation' => 'Safe!Pass123',
+        ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonPath('errors.email.0', 'The email domain is not allowed.')
+            ->assertJsonStructure(['trace_id']);
+
+        $this->assertDatabaseMissing('users', [
+            'student_id' => '2301284',
+        ]);
     }
 
     public function test_register_student_id_validation_matrix(): void
@@ -175,7 +224,7 @@ class AuthTest extends TestCase
         $user = $this->createUser('2301236', 'pending_verification', '2301236@lnu.edu.ph', false);
 
         $response = $this->postJson('/api/v1/auth/login', [
-            'identifier' => $user->student_id,
+            'email' => $user->email,
             'password' => 'Safe!Pass123',
         ]);
 
@@ -192,7 +241,7 @@ class AuthTest extends TestCase
         $user = $this->createUser('2301232', 'suspended', '2301232@lnu.edu.ph', true);
 
         $response = $this->postJson('/api/v1/auth/login', [
-            'identifier' => $user->student_id,
+            'student_id' => $user->student_id,
             'password' => 'Safe!Pass123',
         ]);
 
@@ -272,7 +321,7 @@ class AuthTest extends TestCase
         $this->assertNotNull($otp);
 
         $this->postJson('/api/v1/auth/login', [
-            'identifier' => '2301240@lnu.edu.ph',
+            'email' => '2301240@lnu.edu.ph',
             'password' => 'Safe!Pass123',
         ])
             ->assertStatus(403)
@@ -308,7 +357,7 @@ class AuthTest extends TestCase
         }
 
         $this->postJson('/api/v1/auth/login', [
-            'identifier' => '2301240@lnu.edu.ph',
+            'email' => '2301240@lnu.edu.ph',
             'password' => 'Safe!Pass123',
         ])
             ->assertOk()
@@ -459,7 +508,7 @@ class AuthTest extends TestCase
         $user = $this->createUser('2301237', 'active', 'student@lnu.edu.ph');
 
         $response = $this->postJson('/api/v1/auth/login', [
-            'identifier' => 'student@lnu.edu.ph',
+            'email' => 'student@lnu.edu.ph',
             'password' => 'Safe!Pass123',
         ]);
 
@@ -483,16 +532,32 @@ class AuthTest extends TestCase
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Validation failed.')
             ->assertJsonStructure([
-                'errors' => ['identifier', 'password'],
+                'errors' => ['email', 'password'],
                 'trace_id',
             ]);
     }
+
+    public function test_login_succeeds_with_student_id_when_compatibility_is_preserved(): void
+    {
+        $user = $this->createUser('2301247', 'active', '2301247@lnu.edu.ph');
+
+        $this->postJson('/api/v1/auth/login', [
+            'student_id' => $user->student_id,
+            'password' => 'Safe!Pass123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Login successful.')
+            ->assertJsonPath('data.user.id', $user->id)
+            ->assertJsonPath('data.token_type', 'Bearer');
+    }
+
     public function test_login_with_wrong_password_returns_401_in_standard_error_envelope(): void
     {
         $user = $this->createUser('2301299', 'active', 'wrong-pass@lnu.edu.ph');
 
         $response = $this->postJson('/api/v1/auth/login', [
-            'identifier' => $user->student_id,
+            'email' => $user->email,
             'password' => 'Wrong!Pass123',
         ]);
 
@@ -502,6 +567,182 @@ class AuthTest extends TestCase
             ->assertJsonPath('message', 'Invalid credentials.')
             ->assertJsonPath('errors', null)
             ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_login_still_accepts_legacy_identifier_payload_for_backward_compatibility(): void
+    {
+        $user = $this->createUser('2301231', 'active', '2301231@lnu.edu.ph');
+
+        $this->postJson('/api/v1/auth/login', [
+            'identifier' => $user->student_id,
+            'password' => 'Safe!Pass123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Login successful.')
+            ->assertJsonPath('data.user.id', $user->id);
+    }
+
+    public function test_forgot_password_requires_email(): void
+    {
+        $this->postJson('/api/v1/auth/password/forgot', [])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['email'],
+                'trace_id',
+            ]);
+    }
+
+    public function test_forgot_password_rejects_non_lnu_email(): void
+    {
+        $this->postJson('/api/v1/auth/password/forgot', [
+            'email' => 'student@example.com',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonPath('errors.email.0', 'The email domain is not allowed.')
+            ->assertJsonStructure(['trace_id']);
+    }
+
+    public function test_forgot_password_succeeds_with_registered_lnu_email(): void
+    {
+        Mail::fake();
+
+        $user = $this->createUser('2301281', 'active', '2301281@lnu.edu.ph');
+
+        $this->postJson('/api/v1/auth/password/forgot', [
+            'email' => $user->email,
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'If that account exists, an OTP has been sent to the registered email.')
+            ->assertJsonStructure(['trace_id']);
+
+        Mail::assertSent(PasswordResetOtpMail::class, 1);
+    }
+
+    public function test_forgot_password_fails_with_invalid_email_format(): void
+    {
+        $this->postJson('/api/v1/auth/password/forgot', [
+            'email' => 'not-an-email',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['email'],
+                'trace_id',
+            ]);
+    }
+
+    public function test_password_reset_flow_works_with_registered_email_contract(): void
+    {
+        Mail::fake();
+
+        $user = $this->createUser('2301288', 'active', '2301288@lnu.edu.ph');
+
+        $this->postJson('/api/v1/auth/password/forgot', [
+            'email' => $user->email,
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'If that account exists, an OTP has been sent to the registered email.');
+
+        $otp = null;
+        Mail::assertSent(PasswordResetOtpMail::class, function (PasswordResetOtpMail $mail) use (&$otp): bool {
+            $otp = $mail->otp;
+
+            return true;
+        });
+        $this->assertNotNull($otp);
+
+        $this->postJson('/api/v1/auth/password/reset', [
+            'email' => $user->email,
+            'otp' => $otp,
+            'password' => 'Newer!Pass123',
+            'password_confirmation' => 'Newer!Pass123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Password reset successfully. Please log in with your new password.');
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => $user->email,
+            'password' => 'Newer!Pass123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Login successful.');
+    }
+
+    public function test_reset_password_fails_when_email_is_missing(): void
+    {
+        $this->postJson('/api/v1/auth/password/reset', [
+            'otp' => '123456',
+            'password' => 'Newer!Pass123',
+            'password_confirmation' => 'Newer!Pass123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['email'],
+                'trace_id',
+            ]);
+    }
+
+    public function test_reset_password_fails_with_invalid_otp_and_keeps_password_unchanged(): void
+    {
+        $user = $this->createUser('2301282', 'active', '2301282@lnu.edu.ph');
+        $verification = $this->createPendingPasswordResetOtpVerification($user, '123456');
+
+        $this->postJson('/api/v1/auth/password/reset', [
+            'email' => $user->email,
+            'otp' => '999999',
+            'password' => 'Newer!Pass123',
+            'password_confirmation' => 'Newer!Pass123',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Invalid OTP.')
+            ->assertJsonPath('errors', null)
+            ->assertJsonStructure(['trace_id']);
+
+        $verification->refresh();
+        $user->refresh();
+
+        $this->assertSame('pending', $verification->status);
+        $this->assertSame(1, $verification->attempt_count);
+        $this->assertTrue(Hash::check('Safe!Pass123', $user->password));
+        $this->assertFalse(Hash::check('Newer!Pass123', $user->password));
+    }
+
+    public function test_reset_password_fails_with_invalid_password_payload_and_keeps_password_unchanged(): void
+    {
+        $user = $this->createUser('2301283', 'active', '2301283@lnu.edu.ph');
+        $this->createPendingPasswordResetOtpVerification($user, '123456');
+
+        $this->postJson('/api/v1/auth/password/reset', [
+            'email' => $user->email,
+            'otp' => '123456',
+            'password' => 'short',
+            'password_confirmation' => 'different',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Validation failed.')
+            ->assertJsonStructure([
+                'errors' => ['password'],
+                'trace_id',
+            ]);
+
+        $user->refresh();
+
+        $this->assertTrue(Hash::check('Safe!Pass123', $user->password));
+        $this->assertFalse(Hash::check('short', $user->password));
     }
 
     public function test_logout_revokes_current_token(): void
@@ -629,6 +870,22 @@ class AuthTest extends TestCase
         return StudentVerification::query()->create([
             'user_id' => $user->id,
             'verification_type' => 'email_otp',
+            'token_hash' => null,
+            'otp_hash' => hash('sha256', $otp),
+            'sent_to_email' => $user->email,
+            'status' => 'pending',
+            'attempt_count' => 0,
+            'expires_at' => now()->addMinutes(10),
+            'requested_ip' => '127.0.0.1',
+            'failure_reason' => null,
+        ]);
+    }
+
+    private function createPendingPasswordResetOtpVerification(User $user, string $otp): StudentVerification
+    {
+        return StudentVerification::query()->create([
+            'user_id' => $user->id,
+            'verification_type' => 'password_reset_otp',
             'token_hash' => null,
             'otp_hash' => hash('sha256', $otp),
             'sent_to_email' => $user->email,
