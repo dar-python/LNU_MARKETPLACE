@@ -109,7 +109,7 @@ class ListingService {
     final response = await _apiClient.dio.post(
       '/api/v1/listings',
       data: <String, dynamic>{
-        'category_id': backendCategory.id,
+        'category_slug': backendCategory.slug,
         'title': normalizedTitle,
         'description': normalizedDescription,
         'price': parsedPrice.toStringAsFixed(2),

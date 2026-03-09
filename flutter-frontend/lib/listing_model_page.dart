@@ -368,11 +368,13 @@ class BackendListingCategory {
   const BackendListingCategory({
     required this.id,
     required this.name,
+    required this.slug,
     required this.aliases,
   });
 
   final int id;
   final String name;
+  final String slug;
   final List<String> aliases;
 }
 
@@ -381,27 +383,37 @@ const List<BackendListingCategory> _backendListingCategories =
       BackendListingCategory(
         id: 1,
         name: 'Electronics',
+        slug: 'electronics',
         aliases: <String>['electronics', 'gadgets'],
       ),
-      BackendListingCategory(id: 2, name: 'Books', aliases: <String>['books']),
+      BackendListingCategory(
+        id: 2,
+        name: 'Books',
+        slug: 'books',
+        aliases: <String>['books'],
+      ),
       BackendListingCategory(
         id: 3,
         name: 'School Supplies',
+        slug: 'school-supplies',
         aliases: <String>['school supplies', 'lab tools'],
       ),
       BackendListingCategory(
         id: 4,
         name: 'Uniforms',
+        slug: 'uniforms',
         aliases: <String>['uniforms'],
       ),
       BackendListingCategory(
         id: 5,
         name: 'Dorm Essentials',
+        slug: 'dorm-essentials',
         aliases: <String>['dorm essentials'],
       ),
       BackendListingCategory(
         id: 6,
         name: 'Others',
+        slug: 'others',
         aliases: <String>[
           'others',
           'sports',
