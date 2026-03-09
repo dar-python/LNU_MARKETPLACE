@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ListingBrowseRequest;
+use App\Http\Requests\OwnerListingIndexRequest;
 use App\Models\Category;
 use App\Models\Listing;
 use App\Models\ListingImage;
@@ -164,6 +165,30 @@ class ListingController extends Controller
         ]);
     }
 
+    public function mine(OwnerListingIndexRequest $request): JsonResponse
+    {
+        $perPage = (int) ($request->validated('per_page') ?? 10);
+        $userId = (int) $request->user()->id;
+
+        $paginator = $this->ownerListingsQuery($userId)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
+
+        return ApiResponse::success('Owner listings retrieved successfully.', [
+            'listings' => array_map(
+                fn (Listing $listing): array => $this->serializeOwnerListing($listing),
+                $paginator->items()
+            ),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+            ],
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate($this->validationRules());
@@ -182,7 +207,9 @@ class ListingController extends Controller
         ]);
 
         return ApiResponse::success('Listing created.', [
-            'listing' => $listing->fresh(),
+            'listing' => $this->serializeOwnerListing(
+                $listing->fresh(['category:id,name,slug', 'approvedByUser:id,first_name,middle_name,last_name'])
+            ),
         ], 201);
     }
 
@@ -208,7 +235,9 @@ class ListingController extends Controller
         $listing->save();
 
         return ApiResponse::success('Listing updated.', [
-            'listing' => $listing->fresh(),
+            'listing' => $this->serializeOwnerListing(
+                $listing->fresh(['category:id,name,slug', 'approvedByUser:id,first_name,middle_name,last_name'])
+            ),
         ]);
     }
 
@@ -339,6 +368,16 @@ class ListingController extends Controller
         return $query;
     }
 
+    private function ownerListingsQuery(int $userId): Builder
+    {
+        return Listing::query()
+            ->with([
+                'category:id,name,slug',
+                'approvedByUser:id,first_name,middle_name,last_name',
+            ])
+            ->where('user_id', $userId);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -371,5 +410,79 @@ class ListingController extends Controller
             'created_at' => $listing->created_at?->toISOString(),
             'updated_at' => $listing->updated_at?->toISOString(),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeOwnerListing(Listing $listing): array
+    {
+        $moderationStatus = $this->listingModerationStatus($listing);
+        $adminNote = trim((string) $listing->moderation_note);
+        $reviewedBy = $listing->relationLoaded('approvedByUser')
+            ? $listing->approvedByUser
+            : $listing->approvedByUser()->first();
+
+        return [
+            'id' => $listing->id,
+            'user_id' => (int) $listing->user_id,
+            'category_id' => (int) $listing->category_id,
+            'title' => $listing->title,
+            'description' => $listing->description,
+            'price' => $listing->price,
+            'item_condition' => (string) $listing->item_condition,
+            'listing_status' => (string) $listing->listing_status,
+            'item_status' => $this->listingItemStatus($listing),
+            'moderation_status' => $moderationStatus,
+            'moderation_label' => $this->listingModerationLabel($moderationStatus),
+            'admin_note' => $moderationStatus === 'declined' && $adminNote !== '' ? $adminNote : null,
+            'moderation_note' => $adminNote !== '' ? $adminNote : null,
+            'campus_location' => $listing->campus_location,
+            'category' => $listing->category ? [
+                'id' => $listing->category->id,
+                'name' => $listing->category->name,
+                'slug' => $listing->category->slug,
+            ] : null,
+            'approved_by_user_id' => $listing->approved_by_user_id === null ? null : (int) $listing->approved_by_user_id,
+            'reviewed_at' => $listing->approved_at?->toISOString(),
+            'approved_at' => $listing->approved_at?->toISOString(),
+            'reviewed_by' => $listing->approved_by_user_id === null ? null : (int) $listing->approved_by_user_id,
+            'reviewed_by_name' => $reviewedBy?->fullName(),
+            'created_at' => $listing->created_at?->toISOString(),
+            'updated_at' => $listing->updated_at?->toISOString(),
+        ];
+    }
+
+    private function listingModerationStatus(Listing $listing): string
+    {
+        if ((string) $listing->listing_status === 'rejected') {
+            return 'declined';
+        }
+
+        if ($listing->approved_at !== null) {
+            return 'approved';
+        }
+
+        return 'pending';
+    }
+
+    private function listingModerationLabel(string $moderationStatus): string
+    {
+        return match ($moderationStatus) {
+            'approved' => 'Approved',
+            'declined' => 'Declined',
+            default => 'Under Review - wait for approval',
+        };
+    }
+
+    private function listingItemStatus(Listing $listing): ?string
+    {
+        $listingStatus = (string) $listing->listing_status;
+
+        if (in_array($listingStatus, ['available', 'reserved', 'sold'], true)) {
+            return $listingStatus;
+        }
+
+        return null;
     }
 }

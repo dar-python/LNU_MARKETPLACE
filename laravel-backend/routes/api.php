@@ -32,6 +32,7 @@ Route::prefix('v1')->group(function (): void {
     });
 
     Route::get('/listings', [ListingController::class, 'index']);
+    Route::middleware('auth:sanctum')->get('/listings/mine', [ListingController::class, 'mine']);
     Route::get('/listings/{listing}', [ListingController::class, 'show']);
 
     Route::middleware('auth:sanctum')->group(function (): void {

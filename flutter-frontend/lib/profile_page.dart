@@ -5,7 +5,7 @@ import 'backend_status_page.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'favorite_page.dart';
-import 'Inquiry_page.dart';
+import 'my_listings_page.dart';
 
 const kNavy = Color(0xFF000080);
 const kDarkNavy = Color(0xFF00263E);
@@ -393,7 +393,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const InquiryPage(),
+                            builder: (_) => const MyListingsPage(),
                           ),
                         );
                       },

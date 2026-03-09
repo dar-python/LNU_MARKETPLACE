@@ -56,6 +56,24 @@ class ListingService {
     return remoteCollection;
   }
 
+  Future<ListingCollection> fetchMyListings({
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    final response = await _apiClient.dio.get(
+      '/api/v1/listings/mine',
+      queryParameters: <String, dynamic>{'page': page, 'per_page': perPage},
+    );
+
+    final remoteCollection = ListingCollection.fromEnvelope(
+      response.data,
+      adapter: _listingAdapter,
+    );
+
+    _listingAdapter.prime(remoteCollection.listings);
+    return remoteCollection;
+  }
+
   Future<ListingDetail> fetchListingDetail(
     int listingId, {
     Listing? fallback,
@@ -226,6 +244,8 @@ class ListingService {
       icon: categoryIcon(categoryName),
       color: categoryColor(categoryName),
       listingStatus: 'pending_review',
+      itemStatus: '',
+      moderationStatus: 'pending',
       campusLocation: campusLocation,
       imageFile: imageFile,
     );

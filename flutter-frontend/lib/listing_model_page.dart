@@ -9,6 +9,12 @@ class Listing {
   final int userId;
   final int categoryId;
   final String listingStatus;
+  final String itemStatus;
+  final String moderationStatus;
+  final String adminNote;
+  final DateTime? reviewedAt;
+  final int? reviewedByUserId;
+  final String reviewedByName;
   final String campusLocation;
   final String title;
   final String price;
@@ -35,6 +41,12 @@ class Listing {
     this.userId = 0,
     this.categoryId = 0,
     this.listingStatus = '',
+    this.itemStatus = '',
+    this.moderationStatus = 'pending',
+    this.adminNote = '',
+    this.reviewedAt,
+    this.reviewedByUserId,
+    this.reviewedByName = '',
     this.campusLocation = '',
     this.imageFile,
   });
@@ -44,6 +56,12 @@ class Listing {
     int? userId,
     int? categoryId,
     String? listingStatus,
+    String? itemStatus,
+    String? moderationStatus,
+    String? adminNote,
+    DateTime? reviewedAt,
+    int? reviewedByUserId,
+    String? reviewedByName,
     String? campusLocation,
     String? title,
     String? price,
@@ -61,6 +79,12 @@ class Listing {
       userId: userId ?? this.userId,
       categoryId: categoryId ?? this.categoryId,
       listingStatus: listingStatus ?? this.listingStatus,
+      itemStatus: itemStatus ?? this.itemStatus,
+      moderationStatus: moderationStatus ?? this.moderationStatus,
+      adminNote: adminNote ?? this.adminNote,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      reviewedByUserId: reviewedByUserId ?? this.reviewedByUserId,
+      reviewedByName: reviewedByName ?? this.reviewedByName,
       campusLocation: campusLocation ?? this.campusLocation,
       title: title ?? this.title,
       price: price ?? this.price,
@@ -85,6 +109,55 @@ class Listing {
   }) {
     return BackendListingAdapter.instance.fromApi(json, fallback: fallback);
   }
+
+  bool get isModerationPending => moderationStatus == 'pending';
+
+  bool get isModerationApproved => moderationStatus == 'approved';
+
+  bool get isModerationDeclined => moderationStatus == 'declined';
+
+  String get moderationLabel {
+    switch (moderationStatus) {
+      case 'approved':
+        return 'Approved';
+      case 'declined':
+        return 'Declined';
+      default:
+        return 'Under Review - wait for approval';
+    }
+  }
+
+  String get itemStatusLabel {
+    final normalizedStatus = itemStatus.trim().isNotEmpty
+        ? itemStatus
+        : listingStatus;
+
+    switch (_normalizeLookupValue(normalizedStatus)) {
+      case 'available':
+        return 'Available';
+      case 'reserved':
+        return 'Reserved';
+      case 'sold':
+        return 'Sold';
+      default:
+        return 'Not public yet';
+    }
+  }
+
+  String? get adminNotePreview {
+    final note = adminNote.trim();
+    if (note.isEmpty) {
+      return null;
+    }
+
+    if (note.length <= 90) {
+      return note;
+    }
+
+    return '${note.substring(0, 87)}...';
+  }
+
+  String get reviewedAtLabel => formatListingDateTime(reviewedAt);
 }
 
 class ListingCollection {
@@ -247,6 +320,13 @@ class BackendListingAdapter {
       fallback: seed?.condition,
     );
     final resolvedSeller = _resolveSeller(json, seed);
+    final resolvedListingStatus = _stringValue(
+      json['listing_status'],
+      fallback: seed?.listingStatus ?? '',
+    );
+    final resolvedReviewedAt =
+        _parseDateTime(json['reviewed_at'] ?? json['approved_at']) ??
+        seed?.reviewedAt;
     final resolvedListing = Listing(
       id: id,
       userId: _parseListingId(json['user_id'], fallback: seed?.userId ?? 0),
@@ -254,9 +334,29 @@ class BackendListingAdapter {
         json['category_id'],
         fallback: seed?.categoryId ?? 0,
       ),
-      listingStatus: _stringValue(
-        json['listing_status'],
-        fallback: seed?.listingStatus ?? '',
+      listingStatus: resolvedListingStatus,
+      itemStatus: _resolveItemStatus(
+        json['item_status'],
+        fallback: seed?.itemStatus ?? resolvedListingStatus,
+      ),
+      moderationStatus: _resolveModerationStatus(
+        json,
+        seed,
+        listingStatus: resolvedListingStatus,
+      ),
+      adminNote: _stringValue(
+        json['admin_note'] ?? json['moderation_note'],
+        fallback: seed?.adminNote ?? '',
+      ),
+      reviewedAt: resolvedReviewedAt,
+      reviewedByUserId:
+          _parseNullableInt(
+            json['reviewed_by'] ?? json['approved_by_user_id'],
+          ) ??
+          seed?.reviewedByUserId,
+      reviewedByName: _stringValue(
+        json['reviewed_by_name'],
+        fallback: seed?.reviewedByName ?? '',
       ),
       campusLocation: _stringValue(
         json['campus_location'] ?? json['meetup_location'],
@@ -361,6 +461,33 @@ class BackendListingAdapter {
 
   bool _isFallbackSeller(String value) {
     return value.trim().isEmpty || value == _fallbackSellerLabel;
+  }
+
+  String _resolveModerationStatus(
+    Map<String, dynamic> json,
+    Listing? seed, {
+    required String listingStatus,
+  }) {
+    final directStatus = _stringValue(json['moderation_status']);
+    if (directStatus == 'pending' ||
+        directStatus == 'approved' ||
+        directStatus == 'declined') {
+      return directStatus;
+    }
+
+    if (_normalizeLookupValue(listingStatus) == 'rejected') {
+      return 'declined';
+    }
+
+    if (_parseDateTime(json['reviewed_at'] ?? json['approved_at']) != null) {
+      return 'approved';
+    }
+
+    if (seed != null && seed.moderationStatus.trim().isNotEmpty) {
+      return seed.moderationStatus;
+    }
+
+    return 'pending';
   }
 }
 
@@ -590,6 +717,14 @@ int _parseListingId(dynamic rawValue, {int fallback = 0}) {
   return int.tryParse(rawValue?.toString() ?? '') ?? fallback;
 }
 
+int? _parseNullableInt(dynamic rawValue) {
+  if (rawValue == null) {
+    return null;
+  }
+
+  return _parseListingId(rawValue);
+}
+
 String _priceLabelFromApi(dynamic rawValue, {String? fallback}) {
   final value = _stringValue(rawValue);
   final seed = (fallback ?? '').trim();
@@ -638,6 +773,23 @@ String _conditionLabelFromApi(dynamic rawValue, {String? fallback}) {
   }
 }
 
+String _resolveItemStatus(dynamic rawValue, {String fallback = ''}) {
+  final normalized = _normalizeLookupValue(
+    _stringValue(rawValue, fallback: fallback),
+  );
+
+  switch (normalized) {
+    case 'available':
+      return 'available';
+    case 'reserved':
+      return 'reserved';
+    case 'sold':
+      return 'sold';
+    default:
+      return '';
+  }
+}
+
 List<Map<String, dynamic>> _imageListValue(dynamic rawValue) {
   if (rawValue is! List) {
     return const <Map<String, dynamic>>[];
@@ -665,6 +817,29 @@ String _stringValue(dynamic rawValue, {String fallback = ''}) {
 
 String _normalizeLookupValue(String value) {
   return value.trim().toLowerCase().replaceAll('_', ' ');
+}
+
+DateTime? _parseDateTime(dynamic rawValue) {
+  final value = _stringValue(rawValue);
+  if (value.isEmpty) {
+    return null;
+  }
+
+  return DateTime.tryParse(value)?.toLocal();
+}
+
+String formatListingDateTime(DateTime? value) {
+  if (value == null) {
+    return 'Not reviewed yet';
+  }
+
+  final localValue = value.toLocal();
+  final month = localValue.month.toString().padLeft(2, '0');
+  final day = localValue.day.toString().padLeft(2, '0');
+  final hour = localValue.hour.toString().padLeft(2, '0');
+  final minute = localValue.minute.toString().padLeft(2, '0');
+
+  return '${localValue.year}-$month-$day $hour:$minute';
 }
 
 String _publicImageUrl(String imagePath) {
