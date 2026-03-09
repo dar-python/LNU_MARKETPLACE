@@ -10,6 +10,7 @@ class FavoritesService {
   FavoritesService._internal();
 
   final ApiClient _apiClient = ApiClient();
+  final BackendListingAdapter _listingAdapter = BackendListingAdapter.instance;
   final List<Listing> _favorites = [];
   bool _hasLoadedFavorites = false;
   String? _loadedForUserKey;
@@ -47,24 +48,19 @@ class FavoritesService {
         '/api/v1/favorites',
         queryParameters: <String, dynamic>{'per_page': 50},
       );
-
-      final existingById = <int, Listing>{
-        for (final listing in _favorites) listing.id: listing,
-      };
-      final listings = _extractListings(
+      final listings = ListingCollection.fromEnvelope(
         response.data,
-        existingById: existingById,
+        adapter: _listingAdapter,
       );
-      if (listings == null) {
-        return 'Invalid favorites payload.';
-      }
 
       _favorites
         ..clear()
-        ..addAll(listings);
+        ..addAll(listings.listings);
       _hasLoadedFavorites = true;
       _loadedForUserKey = _currentUserKey;
       return null;
+    } on FormatException catch (error) {
+      return error.message;
     } catch (error) {
       return _apiClient.mapError(error);
     }
@@ -84,13 +80,15 @@ class FavoritesService {
         data: <String, dynamic>{'listing_id': listing.id},
       );
 
-      final apiListing = _extractSingleListing(response.data);
-      final favoriteListing = _mergeListingDetails(
-        apiListing ?? listing,
-        listing,
+      final favoriteListing =
+          _extractSingleListing(response.data, fallback: listing) ?? listing;
+      final favoriteIndex = _favorites.indexWhere(
+        (existingListing) => existingListing.id == favoriteListing.id,
       );
 
-      if (!isFavorite(favoriteListing.id)) {
+      if (favoriteIndex >= 0) {
+        _favorites[favoriteIndex] = favoriteListing;
+      } else {
         _favorites.insert(0, favoriteListing);
       }
 
@@ -153,64 +151,13 @@ class FavoritesService {
     _loadedForUserKey = null;
   }
 
-  List<Listing>? _extractListings(
-    dynamic body, {
-    Map<int, Listing> existingById = const <int, Listing>{},
-  }) {
-    if (body is! Map<String, dynamic>) {
+  Listing? _extractSingleListing(dynamic body, {Listing? fallback}) {
+    final rawListing = _apiClient.extractDataItemMap(body, 'listing');
+    if (rawListing == null) {
       return null;
     }
 
-    final payload = body['data'];
-    if (payload is! Map<String, dynamic>) {
-      return null;
-    }
-
-    final rawListings = payload['listings'];
-    if (rawListings is! List) {
-      return null;
-    }
-
-    return rawListings.whereType<Map>().map((rawListing) {
-      final parsed = Listing.fromApi(Map<String, dynamic>.from(rawListing));
-      return _mergeListingDetails(parsed, existingById[parsed.id]);
-    }).toList();
-  }
-
-  Listing? _extractSingleListing(dynamic body) {
-    if (body is! Map<String, dynamic>) {
-      return null;
-    }
-
-    final payload = body['data'];
-    if (payload is! Map<String, dynamic>) {
-      return null;
-    }
-
-    final rawListing = payload['listing'];
-    if (rawListing is! Map) {
-      return null;
-    }
-
-    return Listing.fromApi(Map<String, dynamic>.from(rawListing));
-  }
-
-  Listing _mergeListingDetails(Listing parsed, Listing? existing) {
-    if (existing == null) {
-      return parsed;
-    }
-
-    final usesFallbackCategory = parsed.category == 'Marketplace';
-    final usesFallbackSeller = parsed.seller == 'LNU Seller';
-
-    return parsed.copyWith(
-      category: usesFallbackCategory ? existing.category : null,
-      seller: usesFallbackSeller ? existing.seller : null,
-      sellerAvatar: usesFallbackSeller ? existing.sellerAvatar : null,
-      icon: usesFallbackCategory ? existing.icon : null,
-      color: usesFallbackCategory ? existing.color : null,
-      imageFile: existing.imageFile,
-    );
+    return _listingAdapter.fromApi(rawListing, fallback: fallback);
   }
 
   String? _loginRequiredMessage(String action) {

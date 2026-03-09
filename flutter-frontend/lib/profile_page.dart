@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
 import 'backend_status_page.dart';
+import 'favorite_service.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'favorite_page.dart';
@@ -63,6 +64,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _logout() async {
     await AuthService().logout();
+    FavoritesService().reset();
 
     if (!mounted) {
       return;

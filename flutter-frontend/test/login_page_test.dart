@@ -11,9 +11,9 @@ void main() {
       MaterialApp(
         home: LoginPage(
           loginHandler:
-              ({required String studentId, required String password}) async {
-                if (studentId.trim().isEmpty) {
-                  return 'Student ID is required.';
+              ({required String identifier, required String password}) async {
+                if (identifier.trim().isEmpty) {
+                  return 'Email is required.';
                 }
 
                 if (password.trim().isEmpty) {
@@ -29,7 +29,7 @@ void main() {
     await tester.tap(find.text('Sign In'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Student ID is required.'), findsOneWidget);
+    expect(find.text('Email is required.'), findsOneWidget);
   });
 
   testWidgets('Unverified login response navigates to verify OTP screen', (
@@ -39,7 +39,7 @@ void main() {
       MaterialApp(
         home: LoginPage(
           loginHandler:
-              ({required String studentId, required String password}) async =>
+              ({required String identifier, required String password}) async =>
                   'Email not verified yet.',
           authErrorCodeResolver: () => 'EMAIL_NOT_VERIFIED',
           authErrorIdentifierResolver: () => '2308888@lnu.edu.ph',

@@ -20,7 +20,7 @@ class LoginPage extends StatefulWidget {
   });
 
   final Future<String?> Function({
-    required String studentId,
+    required String identifier,
     required String password,
   })?
   loginHandler;
@@ -32,11 +32,18 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _studentIdController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   Future<void> _login() async {
     setState(() {
@@ -48,11 +55,11 @@ class _LoginPageState extends State<LoginPage> {
     final loginHandler = widget.loginHandler;
     final error = await (loginHandler != null
         ? loginHandler(
-            studentId: _studentIdController.text.trim(),
+            identifier: _identifierController.text.trim(),
             password: _passwordController.text,
           )
         : authService.login(
-            studentId: _studentIdController.text.trim(),
+            identifier: _identifierController.text.trim(),
             password: _passwordController.text,
           ));
 
@@ -70,7 +77,7 @@ class _LoginPageState extends State<LoginPage> {
         final verifyIdentifier =
             backendIdentifier != null && backendIdentifier.trim().isNotEmpty
             ? backendIdentifier.trim()
-            : _studentIdController.text.trim();
+            : _identifierController.text.trim();
 
         if (!mounted) {
           return;
@@ -81,7 +88,7 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(
             builder: (_) => VerifyOtpPage(
               identifier: verifyIdentifier,
-              loginIdentifier: _studentIdController.text.trim(),
+              loginIdentifier: _identifierController.text.trim(),
               loginPassword: _passwordController.text,
             ),
           ),
@@ -173,19 +180,19 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sign in to your account',
+                    'Sign in with your LNU email',
                     style: TextStyle(color: Colors.grey[500], fontSize: 13),
                   ),
                   const SizedBox(height: 28),
 
-                  // Student ID
-                  _buildLabel('Student ID'),
+                  // Email
+                  _buildLabel('LNU Email Address'),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    controller: _studentIdController,
-                    hint: 'Enter Student ID',
-                    icon: Icons.badge_outlined,
-                    keyboardType: TextInputType.text,
+                    controller: _identifierController,
+                    hint: 'Enter your LNU email',
+                    icon: Icons.email_outlined,
+                    keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
 

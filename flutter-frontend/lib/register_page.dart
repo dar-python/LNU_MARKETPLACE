@@ -31,6 +31,17 @@ class _RegisterPageState extends State<RegisterPage> {
   DateTime? _selectedBirthdate;
   String? _selectedGender;
 
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _usernameController.dispose();
+    _studentIdController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _register() async {
     final studentId = _studentIdController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
@@ -41,36 +52,20 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _errorMessage = 'Full name is required');
       return;
     }
-    if (!RegExp(
-      r'^(210|220|230|240|250|260|270|280)\d{4}$',
-    ).hasMatch(studentId)) {
-      setState(
-        () => _errorMessage =
-            'Student ID must be 7 digits with allowed prefix (210-280).',
-      );
+    if (studentId.isEmpty) {
+      setState(() => _errorMessage = 'Student ID is required.');
       return;
     }
-    if (email.isNotEmpty) {
-      if (!email.endsWith('@lnu.edu.ph')) {
-        setState(() => _errorMessage = 'Email domain must be lnu.edu.ph');
-        return;
-      }
-      if (email.split('@').first != studentId) {
-        setState(() => _errorMessage = 'Email must match Student ID.');
-        return;
-      }
-    }
-    if (!RegExp(
-      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$',
-    ).hasMatch(password)) {
-      setState(
-        () => _errorMessage =
-            'Password must be at least 8 chars with upper/lower/number/symbol.',
-      );
+    if (email.isEmpty) {
+      setState(() => _errorMessage = 'Email is required.');
       return;
     }
     if (_passwordController.text != _confirmPasswordController.text) {
       setState(() => _errorMessage = 'Passwords do not match');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _errorMessage = 'Password is required.');
       return;
     }
     if (!_agreedToPrivacy) {
@@ -100,18 +95,12 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => _errorMessage = error);
     } else {
       if (!mounted) return;
-      final emailIdentifier = _emailController.text.trim();
-      if (emailIdentifier.isEmpty) {
-        Navigator.pushReplacementNamed(context, '/login');
-        return;
-      }
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => VerifyOtpPage(
-            identifier: emailIdentifier,
-            loginIdentifier: _studentIdController.text.trim(),
+            identifier: email,
+            loginIdentifier: email,
             loginPassword: _passwordController.text,
           ),
         ),
@@ -364,11 +353,11 @@ class _RegisterPageState extends State<RegisterPage> {
                   const SizedBox(height: 14),
 
                   // Email
-                  _buildLabel('Email Address'),
+                  _buildLabel('LNU Email Address'),
                   const SizedBox(height: 8),
                   _buildTextField(
                     controller: _emailController,
-                    hint: 'Institutional email',
+                    hint: 'Required: 2301234@lnu.edu.ph',
                     icon: Icons.email_outlined,
                     keyboardType: TextInputType.emailAddress,
                   ),

@@ -67,6 +67,74 @@ class ApiClient {
 
   Dio get dio => _dio;
 
+  Map<String, dynamic>? asMap(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? extractDataMap(dynamic body) {
+    final envelope = asMap(body);
+    if (envelope == null) {
+      return null;
+    }
+
+    return asMap(envelope['data']);
+  }
+
+  Map<String, dynamic>? extractDataItemMap(dynamic body, String key) {
+    final data = extractDataMap(body);
+    if (data == null) {
+      return null;
+    }
+
+    return asMap(data[key]);
+  }
+
+  List<Map<String, dynamic>>? extractDataItemList(dynamic body, String key) {
+    final data = extractDataMap(body);
+    if (data == null) {
+      return null;
+    }
+
+    final rawList = data[key];
+    if (rawList is! List) {
+      return null;
+    }
+
+    return rawList.map(asMap).whereType<Map<String, dynamic>>().toList();
+  }
+
+  String? extractTraceId(dynamic body) {
+    final envelope = asMap(body);
+    if (envelope == null) {
+      return null;
+    }
+
+    final traceId = envelope['trace_id'];
+    if (traceId is String && traceId.isNotEmpty) {
+      return traceId;
+    }
+
+    return null;
+  }
+
+  String? extractMessage(dynamic body) {
+    final envelope = asMap(body);
+    if (envelope == null) {
+      return null;
+    }
+
+    final message = envelope['message'];
+    if (message is String && message.trim().isNotEmpty) {
+      return message.trim();
+    }
+
+    return null;
+  }
+
   String mapError(Object error) {
     if (error is DioException) {
       final statusCode = error.response?.statusCode;
@@ -117,6 +185,10 @@ class ApiClient {
     }
 
     return 'Unexpected error.';
+  }
+
+  bool isUnauthorizedError(Object error) {
+    return error is DioException && error.response?.statusCode == 401;
   }
 
   String? extractErrorCode(Object error) {
@@ -238,8 +310,8 @@ class ApiClient {
       return null;
     }
 
-    final data = error.response?.data;
-    if (data is! Map<String, dynamic>) {
+    final data = asMap(error.response?.data);
+    if (data == null) {
       return null;
     }
 
