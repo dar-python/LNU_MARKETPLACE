@@ -53,6 +53,8 @@ Route::prefix('v1')->group(function (): void {
         });
         Route::prefix('admin')->middleware('admin')->group(function (): void {
             Route::prefix('reports')->group(function (): void {
+                Route::get('/dashboard/summary', [ReportController::class, 'dashboardSummary']);
+                Route::get('/dashboard/reports', [ReportController::class, 'dashboardReports']);
                 Route::get('/listings/{postReport}/history', [ReportController::class, 'listingHistory']);
                 Route::patch('/listings/{postReport}/status', [ReportController::class, 'updateListingStatus']);
                 Route::post('/listings/{postReport}/disable-listing', [ReportController::class, 'disableListing']);
