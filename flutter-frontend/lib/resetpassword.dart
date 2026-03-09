@@ -10,9 +10,9 @@ const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
 class ResetPasswordPage extends StatefulWidget {
-  const ResetPasswordPage({super.key, required this.identifier});
+  const ResetPasswordPage({super.key, required this.email});
 
-  final String identifier;
+  final String email;
 
   @override
   State<ResetPasswordPage> createState() => _ResetPasswordPageState();
@@ -74,9 +74,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       _infoMessage = null;
     });
 
-    final error = await AuthService().forgotPassword(
-      identifier: widget.identifier,
-    );
+    final error = await AuthService().forgotPassword(email: widget.email);
 
     if (!mounted) return;
     setState(() {
@@ -84,7 +82,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       if (error != null) {
         _errorMessage = error;
       } else {
-        _infoMessage = 'OTP resent. Check your email.';
+        _infoMessage =
+            AuthService().lastResponseMessage ??
+            'If that account exists, an OTP has been sent to the registered email.';
       }
     });
   }
@@ -118,7 +118,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     });
 
     final error = await AuthService().resetPassword(
-      identifier: widget.identifier,
+      email: widget.email,
       otp: otp,
       password: password,
       passwordConfirmation: confirm,
@@ -130,8 +130,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     if (error != null) {
       setState(() => _errorMessage = error);
     } else {
-      // Show success then go to login
-      setState(() => _infoMessage = 'Password reset successful!');
+      setState(() {
+        _infoMessage =
+            AuthService().lastResponseMessage ??
+            'Password reset successfully. Please log in with your new password.';
+      });
       await Future.delayed(const Duration(seconds: 1));
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -194,7 +197,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    widget.identifier,
+                    widget.email,
                     style: const TextStyle(color: kGold, fontSize: 12),
                   ),
                 ],
@@ -218,7 +221,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'We sent a 6-digit OTP to your email. Enter it below along with your new password.',
+                    'We sent a 6-digit OTP to your registered email. Enter it below along with your new password.',
                     style: TextStyle(
                       color: Colors.grey[500],
                       fontSize: 13,

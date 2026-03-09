@@ -16,20 +16,20 @@ class ForgotPasswordPage extends StatefulWidget {
 }
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
-  final _identifierController = TextEditingController();
+  final _emailController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
   Future<void> _sendOtp() async {
-    final identifier = _identifierController.text.trim();
-    if (identifier.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your Student ID or email.');
+    final email = _emailController.text.trim().toLowerCase();
+    if (email.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your LNU email.');
       return;
     }
 
@@ -38,7 +38,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       _errorMessage = null;
     });
 
-    final error = await AuthService().forgotPassword(identifier: identifier);
+    final error = await AuthService().forgotPassword(email: email);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -48,9 +48,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     } else {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => ResetPasswordPage(identifier: identifier),
-        ),
+        MaterialPageRoute(builder: (_) => ResetPasswordPage(email: email)),
       );
     }
   }
@@ -133,7 +131,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Enter your Student ID or email and we\'ll send you an OTP to reset your password.',
+                    'Enter your registered LNU email and we\'ll send you an OTP to reset your password.',
                     style: TextStyle(
                       color: Colors.grey[500],
                       fontSize: 13,
@@ -142,13 +140,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   ),
                   const SizedBox(height: 28),
 
-                  // Student ID / Email field
-                  _buildLabel('Student ID or Email'),
+                  // Email field
+                  _buildLabel('Registered LNU Email'),
                   const SizedBox(height: 8),
                   _buildTextField(
-                    controller: _identifierController,
-                    hint: 'Enter your Student ID or email',
-                    icon: Icons.person_outline,
+                    controller: _emailController,
+                    hint: 'Enter your registered LNU email',
+                    icon: Icons.email_outlined,
                   ),
 
                   // Error message

@@ -98,7 +98,9 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
       }
       setState(() {
         _isVerifying = false;
-        _infoMessage = 'Verified. Please login.';
+        _infoMessage =
+            AuthService().lastResponseMessage ??
+            'Email verified. Please sign in.';
       });
       Navigator.pop(context, true);
       return;
@@ -106,11 +108,13 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
 
     setState(() {
       _isAutoSigningIn = true;
-      _infoMessage = 'Email verified. Signing you in...';
+      _infoMessage =
+          AuthService().lastResponseMessage ??
+          'Email verified. Signing you in...';
     });
 
     final loginError = await AuthService().login(
-      studentId: loginIdentifier,
+      identifier: loginIdentifier,
       password: loginPassword,
     );
 
@@ -167,7 +171,7 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
       if (error != null) {
         _errorMessage = error;
       } else {
-        _infoMessage = 'OTP sent. Check your email or backend log output.';
+        _infoMessage = AuthService().lastResponseMessage ?? 'OTP resent.';
       }
     });
   }

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'core/network/api_client.dart';
 import 'listing_detail_page.dart';
 import 'listing_model_page.dart';
+import 'listing_service.dart';
 
 // ─── Browse Page ──────────────────────────────────────────────────────────────
 class BrowsePage extends StatefulWidget {
@@ -14,12 +17,15 @@ class BrowsePage extends StatefulWidget {
 class _BrowsePageState extends State<BrowsePage> {
   final TextEditingController _searchController = TextEditingController();
   final ApiClient _apiClient = ApiClient();
+  final ListingService _listingService = ListingService();
 
+  Timer? _searchDebounce;
   String _selectedCategory = 'All';
   String _searchQuery = '';
   bool _isLoading = true;
   String? _errorMessage;
   List<Listing> _listings = <Listing>[];
+  ListingPagination? _pagination;
 
   final List<String> _categories = [
     'All',
@@ -56,47 +62,45 @@ class _BrowsePageState extends State<BrowsePage> {
     _loadListings();
   }
 
-  Future<void> _loadListings() async {
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
+
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) {
+        return;
+      }
+
+      _loadListings(searchQuery: value);
+    });
+  }
+
+  Future<void> _loadListings({String? searchQuery}) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final response = await _apiClient.dio.get(
-        '/api/v1/listings',
-        queryParameters: const <String, dynamic>{'per_page': 50},
+      final collection = await _listingService.fetchBrowseListings(
+        perPage: 50,
+        searchQuery: searchQuery ?? _searchQuery,
       );
-
-      final body = response.data;
-      if (body is! Map<String, dynamic>) {
-        throw const FormatException('Invalid listings response.');
-      }
-
-      final payload = body['data'];
-      if (payload is! Map<String, dynamic>) {
-        throw const FormatException('Invalid listings payload.');
-      }
-
-      final rawListings = payload['listings'];
-      if (rawListings is! List) {
-        throw const FormatException('Invalid listings payload.');
-      }
-
-      final listings = rawListings
-          .whereType<Map>()
-          .map(
-            (rawListing) =>
-                Listing.fromApi(Map<String, dynamic>.from(rawListing)),
-          )
-          .toList();
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _listings = listings;
+        _listings = collection.listings;
+        _pagination = collection.pagination;
         _isLoading = false;
       });
     } catch (error) {
@@ -157,7 +161,7 @@ class _BrowsePageState extends State<BrowsePage> {
                     ),
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (val) => setState(() => _searchQuery = val),
+                      onChanged: _onSearchChanged,
                       decoration: InputDecoration(
                         hintText: 'Search listings...',
                         hintStyle: TextStyle(
@@ -177,8 +181,10 @@ class _BrowsePageState extends State<BrowsePage> {
                                   size: 18,
                                 ),
                                 onPressed: () {
+                                  _searchDebounce?.cancel();
                                   _searchController.clear();
                                   setState(() => _searchQuery = '');
+                                  _loadListings(searchQuery: '');
                                 },
                               )
                             : null,
@@ -241,7 +247,8 @@ class _BrowsePageState extends State<BrowsePage> {
               child: Row(
                 children: [
                   Text(
-                    '${_filteredListings.length} listing${_filteredListings.length != 1 ? 's' : ''} found',
+                    '${_filteredListings.length} listing${_filteredListings.length != 1 ? 's' : ''} found'
+                    '${_pagination != null && _selectedCategory == 'All' ? ' from ${_pagination!.total}' : ''}',
                     style: const TextStyle(
                       color: kNavy,
                       fontWeight: FontWeight.w700,
