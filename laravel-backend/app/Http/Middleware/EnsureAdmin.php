@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\AdminAccess;
 use App\Support\ApiResponse;
 use Closure;
 use Illuminate\Http\Request;
@@ -19,28 +20,14 @@ class EnsureAdmin
     {
         $user = $request->user();
 
-        if (! $user instanceof User || ! $this->isAdmin($user)) {
-            return ApiResponse::error('Forbidden.', null, 403);
+        if (! $user instanceof User || ! AdminAccess::allows($user)) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::error('Forbidden.', null, 403);
+            }
+
+            abort(403);
         }
 
         return $next($request);
-    }
-
-    private function isAdmin(User $user): bool
-    {
-        $user->loadMissing('roles:id,code');
-
-        $hasAdminRole = $user->role === 'admin'
-            || $user->roles->contains(static fn ($role): bool => $role->code === 'admin');
-
-        if (! $hasAdminRole) {
-            return false;
-        }
-
-        if ($user->currentAccessToken() === null) {
-            return true;
-        }
-
-        return $user->tokenCan('admin');
     }
 }
