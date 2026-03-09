@@ -6,6 +6,7 @@ import 'core/network/api_client.dart';
 import 'favorite_service.dart';
 import 'listing_model_page.dart';
 import 'listing_service.dart';
+import 'login_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
@@ -31,6 +32,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   bool _isUpdatingFavorite = false;
   bool _isLoadingDetail = true;
   bool _isSendingInquiry = false;
+  bool _isListingUnavailable = false;
   String? _detailErrorMessage;
   int _activeImageIndex = 0;
 
@@ -43,7 +45,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   }
 
   Future<void> _loadFavoriteState() async {
-    if (!AuthService().isLoggedIn) {
+    if (!AuthService().hasSession) {
       if (!mounted) {
         return;
       }
@@ -55,14 +57,15 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       return;
     }
 
-    await FavoritesService().ensureLoaded();
+    final error = await FavoritesService().ensureLoaded();
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _isFavorite = FavoritesService().isFavorite(widget.listing.id);
+      _isFavorite =
+          error == null && FavoritesService().isFavorite(widget.listing.id);
       _isLoadingFavoriteState = false;
     });
   }
@@ -88,6 +91,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         _detailImages = detail.images;
         _activeImageIndex = 0;
         _isLoadingDetail = false;
+        _isListingUnavailable = false;
       });
     } catch (error) {
       if (!mounted) {
@@ -99,13 +103,14 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         _detailErrorMessage = error is FormatException
             ? error.message
             : _apiClient.mapError(error);
+        _isListingUnavailable = _apiClient.isNotFoundError(error);
       });
     }
   }
 
   Future<void> _toggleFavorite() async {
-    if (!AuthService().isLoggedIn) {
-      _showSnackBar('Please log in to save favorites.');
+    if (!AuthService().hasSession) {
+      await _openLoginPage();
       return;
     }
 
@@ -135,6 +140,11 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     });
 
     if (error != null) {
+      if (!AuthService().hasSession) {
+        await _openLoginPage();
+        return;
+      }
+
       _showSnackBar(error);
       return;
     }
@@ -161,9 +171,22 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
       );
       return null;
     } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
+      if (sessionExpired) {
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(false);
+        }
+        if (mounted) {
+          await _openLoginPage();
+        }
+        return null;
+      }
+
       return error is FormatException
           ? error.message
-          : _apiClient.mapError(error);
+          : _apiClient.mapError(error, maxMessages: 2, includeFieldNames: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -174,8 +197,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   }
 
   Future<void> _openInquiryComposer() async {
-    if (!AuthService().isLoggedIn) {
-      _showSnackBar('Please log in to send an inquiry.');
+    if (!AuthService().hasSession) {
+      await _openLoginPage();
       return;
     }
 
@@ -197,6 +220,16 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     }
 
     _showSnackBar('Inquiry sent!');
+  }
+
+  Future<void> _openLoginPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
+    if (mounted) {
+      _loadFavoriteState();
+    }
   }
 
   void _showSnackBar(String message) {
@@ -224,337 +257,372 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: <Widget>[
-          SliverAppBar(
-            expandedHeight: 260,
-            pinned: true,
-            backgroundColor: kNavy,
-            leading: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: kWhite.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.arrow_back, color: kWhite, size: 20),
-              ),
-            ),
-            actions: <Widget>[
-              Container(
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: kWhite.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: _isLoadingFavoriteState || _isUpdatingFavorite
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(kWhite),
-                          ),
-                        )
-                      : Icon(
-                          _isFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: _isFavorite ? Colors.red.shade300 : kWhite,
-                          size: 20,
-                        ),
-                  onPressed: _isLoadingFavoriteState || _isUpdatingFavorite
-                      ? null
-                      : _toggleFavorite,
-                ),
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: _ListingHeroGallery(
-                listing: listing,
-                images: _detailImages,
-                activeImageIndex: _activeImageIndex,
-                onPageChanged: (index) {
-                  setState(() => _activeImageIndex = index);
-                },
-              ),
-            ),
+      body: RefreshIndicator(
+        color: kNavy,
+        onRefresh: _loadListingDetail,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  if (_isLoadingDetail) ...<Widget>[
-                    const LinearProgressIndicator(
-                      color: kGold,
-                      backgroundColor: Color(0xFFDCE4FF),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_detailErrorMessage != null) ...<Widget>[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF8E1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFF5C518)),
-                      ),
-                      child: const Text(
-                        'Showing the available listing summary while full details are unavailable.',
-                        style: TextStyle(
-                          color: kNavy,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          listing.title,
-                          style: const TextStyle(
-                            color: kNavy,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            height: 1.2,
+          slivers: <Widget>[
+            SliverAppBar(
+              expandedHeight: 260,
+              pinned: true,
+              backgroundColor: kNavy,
+              leading: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kWhite.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.arrow_back, color: kWhite, size: 20),
+                ),
+              ),
+              actions: <Widget>[
+                Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kWhite.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: _isLoadingFavoriteState || _isUpdatingFavorite
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(kWhite),
+                            ),
+                          )
+                        : Icon(
+                            _isFavorite
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            color: _isFavorite ? Colors.red.shade300 : kWhite,
+                            size: 20,
                           ),
-                        ),
+                    onPressed: _isLoadingFavoriteState || _isUpdatingFavorite
+                        ? null
+                        : _toggleFavorite,
+                  ),
+                ),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                background: _ListingHeroGallery(
+                  listing: listing,
+                  images: _detailImages,
+                  activeImageIndex: _activeImageIndex,
+                  onPageChanged: (index) {
+                    setState(() => _activeImageIndex = index);
+                  },
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (_isLoadingDetail) ...<Widget>[
+                      const LinearProgressIndicator(
+                        color: kGold,
+                        backgroundColor: Color(0xFFDCE4FF),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(height: 16),
+                    ],
+                    if (_detailErrorMessage != null) ...<Widget>[
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: kNavy,
+                          color: const Color(0xFFFFF8E1),
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFF5C518)),
                         ),
-                        child: Text(
-                          listing.price,
-                          style: const TextStyle(
-                            color: kGold,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text(
+                              'Showing the available listing summary while full details are unavailable.',
+                              style: TextStyle(
+                                color: kNavy,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _detailErrorMessage!,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (!_isListingUnavailable) ...<Widget>[
+                              const SizedBox(height: 10),
+                              OutlinedButton(
+                                onPressed: _loadListingDetail,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: kNavy,
+                                ),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 16),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: <Widget>[
-                      _Tag(
-                        label: listing.category,
-                        bgColor: kGold,
-                        textColor: kNavy,
-                      ),
-                      const SizedBox(width: 8),
-                      _Tag(
-                        label: listing.condition,
-                        bgColor: _conditionBackgroundColor(listing.condition),
-                        textColor: _conditionTextColor(listing.condition),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: kWhite,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: <BoxShadow>[
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: kGold,
+                        Expanded(
                           child: Text(
-                            listing.sellerAvatar,
+                            listing.title,
                             style: const TextStyle(
                               color: kNavy,
+                              fontSize: 20,
                               fontWeight: FontWeight.w800,
-                              fontSize: 18,
+                              height: 1.2,
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                listing.seller,
-                                style: const TextStyle(
-                                  color: kNavy,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'LNU Student Seller',
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
+                            horizontal: 12,
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF4F6FF),
-                            borderRadius: BorderRadius.circular(10),
+                            color: kNavy,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Row(
-                            children: <Widget>[
-                              Icon(Icons.star_rounded, color: kGold, size: 14),
-                              SizedBox(width: 3),
-                              Text(
-                                '4.8',
-                                style: TextStyle(
-                                  color: kNavy,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
+                          child: Text(
+                            listing.price,
+                            style: const TextStyle(
+                              color: kGold,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: <Widget>[
+                        _Tag(
+                          label: listing.category,
+                          bgColor: kGold,
+                          textColor: kNavy,
+                        ),
+                        const SizedBox(width: 8),
+                        _Tag(
+                          label: listing.condition,
+                          bgColor: _conditionBackgroundColor(listing.condition),
+                          textColor: _conditionTextColor(listing.condition),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: kWhite,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundColor: kGold,
+                            child: Text(
+                              listing.sellerAvatar,
+                              style: const TextStyle(
+                                color: kNavy,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 18,
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  listing.seller,
+                                  style: const TextStyle(
+                                    color: kNavy,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'LNU Student Seller',
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4F6FF),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Row(
+                              children: <Widget>[
+                                Icon(
+                                  Icons.star_rounded,
+                                  color: kGold,
+                                  size: 14,
+                                ),
+                                SizedBox(width: 3),
+                                Text(
+                                  '4.8',
+                                  style: TextStyle(
+                                    color: kNavy,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Description',
-                    style: TextStyle(
-                      color: kNavy,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: kWhite,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: <BoxShadow>[
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      listing.description,
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Description',
                       style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 13,
-                        height: 1.6,
+                        color: kNavy,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Item Details',
-                    style: TextStyle(
-                      color: kNavy,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: kWhite,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: <BoxShadow>[
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: List<Widget>.generate(detailRows.length, (
-                        index,
-                      ) {
-                        final detail = detailRows[index];
-                        return _DetailRow(
-                          label: detail.label,
-                          value: detail.value,
-                          isLast: index == detailRows.length - 1,
-                        );
-                      }),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _isSendingInquiry
-                          ? null
-                          : _openInquiryComposer,
-                      icon: _isSendingInquiry
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  kGold,
-                                ),
-                              ),
-                            )
-                          : const Icon(Icons.send_rounded, size: 18),
-                      label: const Text(
-                        'Send Inquiry',
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: kWhite,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        listing.description,
                         style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kNavy,
-                        foregroundColor: kGold,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          color: Colors.grey[700],
+                          fontSize: 13,
+                          height: 1.6,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Item Details',
+                      style: TextStyle(
+                        color: kNavy,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: kWhite,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: <BoxShadow>[
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: List<Widget>.generate(detailRows.length, (
+                          index,
+                        ) {
+                          final detail = detailRows[index];
+                          return _DetailRow(
+                            label: detail.label,
+                            value: detail.value,
+                            isLast: index == detailRows.length - 1,
+                          );
+                        }),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSendingInquiry || _isListingUnavailable
+                            ? null
+                            : _openInquiryComposer,
+                        icon: _isSendingInquiry
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    kGold,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.send_rounded, size: 18),
+                        label: const Text(
+                          'Send Inquiry',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kNavy,
+                          foregroundColor: kGold,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

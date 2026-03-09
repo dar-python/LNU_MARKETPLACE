@@ -7,7 +7,9 @@ class FavoritesService {
 
   factory FavoritesService() => _instance;
 
-  FavoritesService._internal();
+  FavoritesService._internal() {
+    AuthService().registerSessionResetCallback(reset);
+  }
 
   final ApiClient _apiClient = ApiClient();
   final BackendListingAdapter _listingAdapter = BackendListingAdapter.instance;
@@ -62,6 +64,7 @@ class FavoritesService {
     } on FormatException catch (error) {
       return error.message;
     } catch (error) {
+      await AuthService().clearSessionIfUnauthorized(error);
       return _apiClient.mapError(error);
     }
   }
@@ -96,6 +99,7 @@ class FavoritesService {
       _loadedForUserKey = _currentUserKey;
       return null;
     } catch (error) {
+      await AuthService().clearSessionIfUnauthorized(error);
       return _apiClient.mapError(error);
     }
   }
@@ -114,6 +118,7 @@ class FavoritesService {
       _loadedForUserKey = _currentUserKey;
       return null;
     } catch (error) {
+      await AuthService().clearSessionIfUnauthorized(error);
       return _apiClient.mapError(error);
     }
   }
@@ -161,7 +166,7 @@ class FavoritesService {
   }
 
   String? _loginRequiredMessage(String action) {
-    if (AuthService().isLoggedIn) {
+    if (AuthService().hasSession) {
       return null;
     }
 
@@ -186,7 +191,9 @@ class FavoritesService {
   void _resetIfUserChanged() {
     final currentUserKey = _currentUserKey;
     if (currentUserKey == null) {
-      reset();
+      if (!AuthService().hasSession) {
+        reset();
+      }
       return;
     }
 

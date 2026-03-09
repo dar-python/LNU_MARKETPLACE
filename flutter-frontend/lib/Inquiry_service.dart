@@ -51,7 +51,7 @@ class InquiryService {
     required String preferredContactMethod,
     Listing? listing,
   }) async {
-    if (!AuthService().isLoggedIn) {
+    if (!AuthService().hasSession) {
       throw const FormatException('Please log in to send an inquiry.');
     }
 

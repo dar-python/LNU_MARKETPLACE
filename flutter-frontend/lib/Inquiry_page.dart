@@ -5,6 +5,7 @@ import 'Inquiry_service.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
 import 'inquiry_detail_page.dart';
+import 'login_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
@@ -26,12 +27,21 @@ class _InquiryPageState extends State<InquiryPage>
   List<Inquiry> _receivedInquiries = <Inquiry>[];
   List<Inquiry> _sentInquiries = <Inquiry>[];
   Set<int> _busyInquiryIds = <int>{};
-  bool _isLoading = true;
-  String? _errorMessage;
+  bool _isLoadingReceived = true;
+  bool _isLoadingSent = true;
+  bool _isRedirectingToLogin = false;
+  String? _receivedErrorMessage;
+  String? _sentErrorMessage;
 
   int get _pendingCount => _receivedInquiries
       .where((inquiry) => inquiry.status == InquiryStatus.pending)
       .length;
+
+  bool get _isLoadingInitialState =>
+      _isLoadingReceived &&
+      _isLoadingSent &&
+      _receivedInquiries.isEmpty &&
+      _sentInquiries.isEmpty;
 
   @override
   void initState() {
@@ -47,53 +57,112 @@ class _InquiryPageState extends State<InquiryPage>
   }
 
   Future<void> _loadInquiries({bool showLoading = true}) async {
-    if (!AuthService().isLoggedIn) {
-      setState(() {
-        _isLoading = false;
-        _receivedInquiries = <Inquiry>[];
-        _sentInquiries = <Inquiry>[];
-        _errorMessage = 'Please log in to view your inquiries.';
-      });
+    if (!AuthService().hasSession) {
+      await _redirectToLogin();
       return;
     }
 
+    final loadedReceived = await _loadReceivedInquiries(
+      showLoading: showLoading,
+    );
+    if (!loadedReceived || !mounted) {
+      return;
+    }
+
+    await _loadSentInquiries(showLoading: showLoading);
+  }
+
+  Future<bool> _loadReceivedInquiries({bool showLoading = true}) async {
     if (showLoading) {
       setState(() {
-        _isLoading = true;
-        _errorMessage = null;
+        _isLoadingReceived = true;
+        _receivedErrorMessage = null;
       });
     } else {
       setState(() {
-        _errorMessage = null;
+        _receivedErrorMessage = null;
       });
     }
 
     try {
-      final results = await Future.wait<List<Inquiry>>(<Future<List<Inquiry>>>[
-        InquiryService().fetchReceivedInquiries(),
-        InquiryService().fetchSentInquiries(),
-      ]);
+      final inquiries = await InquiryService().fetchReceivedInquiries();
 
       if (!mounted) {
-        return;
+        return false;
       }
 
       setState(() {
-        _receivedInquiries = results[0];
-        _sentInquiries = results[1];
-        _isLoading = false;
+        _receivedInquiries = inquiries;
+        _isLoadingReceived = false;
       });
+      return true;
     } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
       if (!mounted) {
-        return;
+        return false;
+      }
+
+      if (sessionExpired) {
+        await _redirectToLogin();
+        return false;
       }
 
       setState(() {
-        _isLoading = false;
-        _errorMessage = error is FormatException
+        _isLoadingReceived = false;
+        _receivedErrorMessage = error is FormatException
             ? error.message
             : _apiClient.mapError(error);
       });
+      return true;
+    }
+  }
+
+  Future<bool> _loadSentInquiries({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoadingSent = true;
+        _sentErrorMessage = null;
+      });
+    } else {
+      setState(() {
+        _sentErrorMessage = null;
+      });
+    }
+
+    try {
+      final inquiries = await InquiryService().fetchSentInquiries();
+
+      if (!mounted) {
+        return false;
+      }
+
+      setState(() {
+        _sentInquiries = inquiries;
+        _isLoadingSent = false;
+      });
+      return true;
+    } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
+      if (!mounted) {
+        return false;
+      }
+
+      if (sessionExpired) {
+        await _redirectToLogin();
+        return false;
+      }
+
+      setState(() {
+        _isLoadingSent = false;
+        _sentErrorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+      return true;
     }
   }
 
@@ -107,7 +176,7 @@ class _InquiryPageState extends State<InquiryPage>
     });
 
     try {
-      await InquiryService().decideInquiry(
+      final updatedInquiry = await InquiryService().decideInquiry(
         inquiryId: inquiry.id,
         decision: decision,
         fallback: inquiry,
@@ -116,6 +185,8 @@ class _InquiryPageState extends State<InquiryPage>
       if (!mounted) {
         return;
       }
+
+      _replaceInquiryInLocalState(updatedInquiry);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -128,9 +199,17 @@ class _InquiryPageState extends State<InquiryPage>
         ),
       );
 
-      await _loadInquiries(showLoading: false);
+      await _loadReceivedInquiries(showLoading: false);
     } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
       if (!mounted) {
+        return;
+      }
+
+      if (sessionExpired) {
+        await _redirectToLogin();
         return;
       }
 
@@ -169,6 +248,39 @@ class _InquiryPageState extends State<InquiryPage>
     }
 
     await _loadInquiries(showLoading: false);
+  }
+
+  void _replaceInquiryInLocalState(Inquiry updatedInquiry) {
+    setState(() {
+      _receivedInquiries = _receivedInquiries
+          .map(
+            (existingInquiry) => existingInquiry.id == updatedInquiry.id
+                ? updatedInquiry
+                : existingInquiry,
+          )
+          .toList();
+      _sentInquiries = _sentInquiries
+          .map(
+            (existingInquiry) => existingInquiry.id == updatedInquiry.id
+                ? updatedInquiry
+                : existingInquiry,
+          )
+          .toList();
+    });
+  }
+
+  Future<void> _redirectToLogin() async {
+    if (_isRedirectingToLogin || !mounted) {
+      return;
+    }
+
+    _isRedirectingToLogin = true;
+    await Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => route.isFirst,
+    );
+    _isRedirectingToLogin = false;
   }
 
   @override
@@ -249,18 +361,11 @@ class _InquiryPageState extends State<InquiryPage>
               ),
             ),
             Expanded(
-              child: _isLoading
+              child: _isLoadingInitialState
                   ? const Center(
                       child: CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(kNavy),
                       ),
-                    )
-                  : _errorMessage != null &&
-                        _receivedInquiries.isEmpty &&
-                        _sentInquiries.isEmpty
-                  ? _InquiryLoadError(
-                      message: _errorMessage!,
-                      onRetry: _loadInquiries,
                     )
                   : TabBarView(
                       controller: _tabController,
@@ -268,8 +373,12 @@ class _InquiryPageState extends State<InquiryPage>
                         _InquiryList(
                           inquiries: _receivedInquiries,
                           isReceived: true,
+                          isLoading: _isLoadingReceived,
+                          errorMessage: _receivedErrorMessage,
                           busyInquiryIds: _busyInquiryIds,
-                          onRefresh: () => _loadInquiries(showLoading: false),
+                          onRefresh: () =>
+                              _loadReceivedInquiries(showLoading: false),
+                          onRetry: _loadReceivedInquiries,
                           onTap: (inquiry) {
                             _openInquiryDetail(inquiry, true);
                           },
@@ -278,8 +387,12 @@ class _InquiryPageState extends State<InquiryPage>
                         _InquiryList(
                           inquiries: _sentInquiries,
                           isReceived: false,
+                          isLoading: _isLoadingSent,
+                          errorMessage: _sentErrorMessage,
                           busyInquiryIds: _busyInquiryIds,
-                          onRefresh: () => _loadInquiries(showLoading: false),
+                          onRefresh: () =>
+                              _loadSentInquiries(showLoading: false),
+                          onRetry: _loadSentInquiries,
                           onTap: (inquiry) {
                             _openInquiryDetail(inquiry, false);
                           },
@@ -299,7 +412,7 @@ class _InquiryLoadError extends StatelessWidget {
   const _InquiryLoadError({required this.message, required this.onRetry});
 
   final String message;
-  final Future<void> Function({bool showLoading}) onRetry;
+  final Future<bool> Function({bool showLoading}) onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -345,70 +458,146 @@ class _InquiryList extends StatelessWidget {
   const _InquiryList({
     required this.inquiries,
     required this.isReceived,
+    required this.isLoading,
+    required this.errorMessage,
     required this.busyInquiryIds,
     required this.onRefresh,
+    required this.onRetry,
     required this.onTap,
     required this.onDecision,
   });
 
   final List<Inquiry> inquiries;
   final bool isReceived;
+  final bool isLoading;
+  final String? errorMessage;
   final Set<int> busyInquiryIds;
-  final Future<void> Function() onRefresh;
+  final Future<bool> Function() onRefresh;
+  final Future<bool> Function({bool showLoading}) onRetry;
   final ValueChanged<Inquiry> onTap;
   final Future<void> Function(Inquiry inquiry, InquiryStatus decision)
   onDecision;
 
   @override
   Widget build(BuildContext context) {
-    if (inquiries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(
-              isReceived ? Icons.inbox_outlined : Icons.send_outlined,
-              size: 64,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isReceived ? 'No inquiries received' : 'No inquiries sent',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              isReceived
-                  ? 'Buyers will contact you here'
-                  : 'Send an inquiry from any listing',
-              style: TextStyle(color: Colors.grey[400], fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
-
     return RefreshIndicator(
       color: kNavy,
       onRefresh: onRefresh,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: inquiries.length,
-        itemBuilder: (context, index) {
-          final inquiry = inquiries[index];
-          return _InquiryCard(
-            inquiry: inquiry,
-            isReceived: isReceived,
-            isBusy: busyInquiryIds.contains(inquiry.id),
-            onTap: () => onTap(inquiry),
-            onDecision: onDecision,
-          );
-        },
+        children: <Widget>[
+          if (isLoading && inquiries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 120),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                ),
+              ),
+            )
+          else if (errorMessage != null && inquiries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 80),
+              child: _InquiryLoadError(
+                message: errorMessage!,
+                onRetry: onRetry,
+              ),
+            )
+          else if (inquiries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 120),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Icon(
+                      isReceived ? Icons.inbox_outlined : Icons.send_outlined,
+                      size: 64,
+                      color: Colors.grey[300],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      isReceived
+                          ? 'No inquiries received'
+                          : 'No inquiries sent',
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isReceived
+                          ? 'Buyers will contact you here'
+                          : 'Send an inquiry from any listing',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...<Widget>[
+            if (errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _InlineLoadWarning(
+                  message: errorMessage!,
+                  onRetry: onRetry,
+                ),
+              ),
+            ...inquiries.map((inquiry) {
+              return _InquiryCard(
+                inquiry: inquiry,
+                isReceived: isReceived,
+                isBusy: busyInquiryIds.contains(inquiry.id),
+                onTap: () => onTap(inquiry),
+                onDecision: onDecision,
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineLoadWarning extends StatelessWidget {
+  const _InlineLoadWarning({required this.message, required this.onRetry});
+
+  final String message;
+  final Future<bool> Function({bool showLoading}) onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF5C518)),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.info_outline, color: kNavy, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: kNavy,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => onRetry(showLoading: false),
+            child: const Text('Retry'),
+          ),
+        ],
       ),
     );
   }

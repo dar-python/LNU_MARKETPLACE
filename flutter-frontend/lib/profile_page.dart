@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
 import 'backend_status_page.dart';
-import 'favorite_service.dart';
 import 'login_page.dart';
 import 'home_page.dart';
 import 'favorite_page.dart';
@@ -23,6 +22,8 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic>? _user;
   bool _isCheckingBackend = false;
+  bool _isLoadingProfile = true;
+  bool _isRedirectingToLogin = false;
   String? _profileError;
 
   @override
@@ -33,6 +34,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _bootstrap() async {
+    if (!AuthService().hasSession) {
+      await _redirectToLogin();
+      return;
+    }
+
     final profileError = await AuthService().refreshCurrentUser();
     await AuthService().pingBackend();
 
@@ -40,9 +46,15 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
+    if (!AuthService().hasSession) {
+      await _redirectToLogin();
+      return;
+    }
+
     setState(() {
       _user = AuthService().currentUser;
       _profileError = profileError;
+      _isLoadingProfile = false;
     });
   }
 
@@ -64,7 +76,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _logout() async {
     await AuthService().logout();
-    FavoritesService().reset();
 
     if (!mounted) {
       return;
@@ -73,13 +84,32 @@ class _ProfilePageState extends State<ProfilePage> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  }
+
+  Future<void> _redirectToLogin() async {
+    if (_isRedirectingToLogin || !mounted) {
+      return;
+    }
+
+    _isRedirectingToLogin = true;
+    await Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
       (Route<dynamic> route) => route.isFirst,
     );
+    _isRedirectingToLogin = false;
   }
 
   @override
   Widget build(BuildContext context) {
     final user = _user;
+    final displayName = _isLoadingProfile && user == null
+        ? 'Loading profile...'
+        : user?['name'] ?? 'Profile unavailable';
+    final displayEmail = user?['email']?.toString() ?? '';
+    final displayStudentId = user?['studentId']?.toString() ?? 'N/A';
     final statusCode = AuthService().lastPingStatusCode;
     final pingBody = AuthService().lastPingBody;
     final pingError = AuthService().lastPingError;
@@ -170,7 +200,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      user?['name'] ?? 'Guest User',
+                      displayName,
                       style: const TextStyle(
                         color: kWhite,
                         fontSize: 20,
@@ -179,7 +209,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      user?['email'] ?? '',
+                      displayEmail,
                       style: const TextStyle(color: kGold, fontSize: 12),
                     ),
                     const SizedBox(height: 4),
@@ -193,7 +223,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'ID: ${user?['studentId'] ?? 'N/A'}',
+                        'ID: $displayStudentId',
                         style: const TextStyle(
                           color: kWhite,
                           fontSize: 11,
@@ -201,6 +231,17 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
                     ),
+                    if (_isLoadingProfile) ...<Widget>[
+                      const SizedBox(height: 12),
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: kGold,
+                        ),
+                      ),
+                    ],
                     if (_profileError != null) ...<Widget>[
                       const SizedBox(height: 8),
                       Text(
@@ -209,6 +250,19 @@ class _ProfilePageState extends State<ProfilePage> {
                           color: Colors.redAccent,
                           fontSize: 12,
                         ),
+                      ),
+                    ],
+                    if (!_isLoadingProfile &&
+                        _profileError != null &&
+                        user == null) ...<Widget>[
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: _bootstrap,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: kWhite,
+                          side: const BorderSide(color: kWhite),
+                        ),
+                        child: const Text('Retry profile'),
                       ),
                     ],
                   ],

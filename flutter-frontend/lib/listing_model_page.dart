@@ -414,6 +414,10 @@ const List<BackendListingCategory> _backendListingCategories =
       ),
     ];
 
+// The frontend exposes broader shopper-friendly labels than the current
+// backend taxonomy, so we map them to the closest supported backend category
+// and safely fall back to "Others" when there is no neat one-to-one match.
+
 BackendListingCategory? backendCategoryById(int id) {
   for (final category in _backendListingCategories) {
     if (category.id == id) {
@@ -422,6 +426,12 @@ BackendListingCategory? backendCategoryById(int id) {
   }
 
   return null;
+}
+
+BackendListingCategory resolveBackendCategoryForFrontendLabel(String label) {
+  return backendCategoryForFrontendLabel(label) ??
+      backendCategoryForFrontendLabel('Others') ??
+      _backendListingCategories.last;
 }
 
 BackendListingCategory? backendCategoryForFrontendLabel(String label) {
@@ -477,8 +487,6 @@ String backendItemConditionForLabel(String label) {
       return 'preowned';
   }
 }
-
-final List<Listing> dummyListings = <Listing>[];
 
 IconData categoryIcon(String category) {
   switch (category) {

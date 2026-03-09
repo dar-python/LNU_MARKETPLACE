@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+
+import 'add_listing_page.dart';
 import 'auth_service.dart';
+import 'browse_page.dart';
+import 'core/network/api_client.dart';
+import 'favorite_page.dart';
+import 'listing_detail_page.dart';
+import 'listing_model_page.dart';
+import 'listing_service.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
-import 'browse_page.dart';
-import 'add_listing_page.dart';
-import 'favorite_page.dart';
 
-// ─── Color Palette ───────────────────────────────────────────────────────────
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
 const kGold = Color(0xFFF5C518);
-const kLightGold = Color(0xFFFFD94A);
 const kWhite = Color(0xFFFFFFFF);
-const kLightBlue = Color(0xFFE8ECFF);
 
-// ─── HomePage ─────────────────────────────────────────────────────────────────
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -23,29 +24,122 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  final ListingService _listingService = ListingService();
+  final ApiClient _apiClient = ApiClient();
 
-  final List<Map<String, dynamic>> _categories = [
-    {'icon': Icons.menu_book_rounded, 'label': 'Books'},
-    {'icon': Icons.checkroom_rounded, 'label': 'Uniforms'},
-    {'icon': Icons.laptop_rounded, 'label': 'Gadgets'},
-    {'icon': Icons.science_rounded, 'label': 'Lab Tools'},
-    {'icon': Icons.food_bank_rounded, 'label': 'Food'},
-    {'icon': Icons.local_drink_rounded, 'label': 'Drinks'},
-    {'icon': Icons.accessibility_rounded, 'label': 'Accessories'},
-    {'icon': Icons.sports_basketball_rounded, 'label': 'Sports'},
-    {'icon': Icons.electrical_services_rounded, 'label': 'Electronics'},
-    {'icon': Icons.inventory_2_rounded, 'label': 'Others'},
+  int _selectedIndex = 0;
+  bool _isLoadingListings = true;
+  String? _listingsErrorMessage;
+  List<Listing> _homeListings = <Listing>[];
+
+  final List<Map<String, dynamic>> _categories = <Map<String, dynamic>>[
+    <String, dynamic>{'icon': Icons.menu_book_rounded, 'label': 'Books'},
+    <String, dynamic>{'icon': Icons.checkroom_rounded, 'label': 'Uniforms'},
+    <String, dynamic>{'icon': Icons.laptop_rounded, 'label': 'Gadgets'},
+    <String, dynamic>{'icon': Icons.science_rounded, 'label': 'Lab Tools'},
+    <String, dynamic>{'icon': Icons.food_bank_rounded, 'label': 'Food'},
+    <String, dynamic>{'icon': Icons.local_drink_rounded, 'label': 'Drinks'},
+    <String, dynamic>{
+      'icon': Icons.accessibility_rounded,
+      'label': 'Accessories',
+    },
+    <String, dynamic>{
+      'icon': Icons.sports_basketball_rounded,
+      'label': 'Sports',
+    },
+    <String, dynamic>{
+      'icon': Icons.electrical_services_rounded,
+      'label': 'Electronics',
+    },
+    <String, dynamic>{'icon': Icons.inventory_2_rounded, 'label': 'Others'},
   ];
 
-  //'Gadgets', 'Lab Tools', 'Sports Equipment',
-  // 'School Supplies', 'Services', 'Clothing', 'Electronics',
-  //'Books', 'Uniforms', 'Food','Drinks', 'Accessories', 'Others',
+  List<Listing> get _featuredListings => _homeListings.take(4).toList();
 
-  // Empty lists — ready for your real data
-  final List<Map<String, dynamic>> _featuredItems = [];
-  final List<Map<String, dynamic>> _recentListings = [];
+  List<Listing> get _recentListings {
+    final recentListings = _homeListings.skip(4).take(4).toList();
+    if (recentListings.isNotEmpty) {
+      return recentListings;
+    }
+
+    return _homeListings.take(4).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHomeListings();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadHomeListings({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoadingListings = true;
+        _listingsErrorMessage = null;
+      });
+    } else {
+      setState(() {
+        _listingsErrorMessage = null;
+      });
+    }
+
+    try {
+      final collection = await _listingService.fetchBrowseListings(perPage: 12);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _homeListings = collection.listings;
+        _isLoadingListings = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoadingListings = false;
+        _listingsErrorMessage = error is FormatException
+            ? error.message
+            : _apiClient.mapError(error);
+      });
+    }
+  }
+
+  Future<void> _openBrowsePage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BrowsePage()),
+    );
+  }
+
+  Future<void> _openListing(Listing listing) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ListingDetailPage(listing: listing)),
+    );
+  }
+
+  Future<void> _openAuthenticatedPage(Widget page) async {
+    if (!AuthService().hasSession) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+      return;
+    }
+
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,21 +147,40 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: const Color(0xFFF4F6FF),
       body: SafeArea(
         child: Column(
-          children: [
+          children: <Widget>[
             _buildHeader(),
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSearchBar(),
-                    _buildHeroBanner(),
-                    _buildCategories(),
-                    _buildFeaturedSection(),
-                    _buildRecentListings(),
-                    const SizedBox(height: 20),
-                  ],
+              child: RefreshIndicator(
+                color: kNavy,
+                onRefresh: () => _loadHomeListings(showLoading: false),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      _buildSearchBar(),
+                      _buildHeroBanner(),
+                      _buildCategories(),
+                      if (_listingsErrorMessage != null &&
+                          _homeListings.isNotEmpty) ...<Widget>[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          child: _HomeStatusCard(
+                            icon: Icons.cloud_off_rounded,
+                            title: 'Could not refresh listings',
+                            message: _listingsErrorMessage!,
+                            actionLabel: 'Retry',
+                            onAction: _loadHomeListings,
+                          ),
+                        ),
+                      ],
+                      _buildFeaturedSection(),
+                      _buildRecentListings(),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -80,14 +193,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Header ──────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
+    final currentUser = AuthService().currentUser;
+    final avatarLabel = currentUser?['avatar']?.toString().trim();
+
     return Container(
       color: kNavy,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
-        children: [
-          // University seal placeholder
+        children: <Widget>[
           Container(
             width: 38,
             height: 38,
@@ -99,16 +213,16 @@ class _HomePageState extends State<HomePage> {
             child: const Icon(Icons.school, color: kNavy, size: 20),
           ),
           const SizedBox(width: 10),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              children: <Widget>[
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'LNU Marketplace',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: kWhite,
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
@@ -121,7 +235,7 @@ class _HomePageState extends State<HomePage> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Leyte Normal University',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: kGold,
                       fontSize: 10,
                       letterSpacing: 1.2,
@@ -131,9 +245,8 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-          const Spacer(),
           Stack(
-            children: [
+            children: <Widget>[
               IconButton(
                 icon: const Icon(Icons.notifications_outlined, color: kWhite),
                 onPressed: () {},
@@ -155,14 +268,21 @@ class _HomePageState extends State<HomePage> {
           CircleAvatar(
             radius: 16,
             backgroundColor: kGold,
-            child: const Icon(Icons.person, color: kNavy, size: 18),
+            child: avatarLabel == null || avatarLabel.isEmpty
+                ? const Icon(Icons.person, color: kNavy, size: 18)
+                : Text(
+                    avatarLabel,
+                    style: const TextStyle(
+                      color: kNavy,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  // ── Search Bar ───────────────────────────────────────────────────────────────
   Widget _buildSearchBar() {
     return Container(
       color: kNavy,
@@ -175,6 +295,8 @@ class _HomePageState extends State<HomePage> {
         ),
         child: TextField(
           controller: _searchController,
+          readOnly: true,
+          onTap: _openBrowsePage,
           decoration: InputDecoration(
             hintText: 'Search books, uniforms, gadgets...',
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
@@ -195,7 +317,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Hero Banner ───────────────────────────────────────────────────────────────
   Widget _buildHeroBanner() {
     return Container(
       margin: const EdgeInsets.all(16),
@@ -203,11 +324,11 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
-          colors: [kDarkNavy, kNavy, Color(0xFF1A2E9E)],
+          colors: <Color>[kDarkNavy, kNavy, Color(0xFF1A2E9E)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: [
+        boxShadow: <BoxShadow>[
           BoxShadow(
             color: kNavy.withValues(alpha: 0.4),
             blurRadius: 16,
@@ -217,8 +338,7 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Stack(
         clipBehavior: Clip.hardEdge,
-        children: [
-          // Decorative circle
+        children: <Widget>[
           Positioned(
             right: -20,
             top: -20,
@@ -248,7 +368,7 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+              children: <Widget>[
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -280,7 +400,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: _openBrowsePage,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kGold,
                     foregroundColor: kNavy,
@@ -315,13 +435,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Categories ────────────────────────────────────────────────────────────────
   Widget _buildCategories() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           const Text(
             'Categories',
             style: TextStyle(
@@ -351,27 +470,51 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Featured Section ─────────────────────────────────────────────────────────
   Widget _buildFeaturedSection() {
     return Padding(
       padding: const EdgeInsets.only(top: 24, left: 16, right: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('Featured Listings', 'View All'),
+        children: <Widget>[
+          _sectionTitle('Featured Listings'),
           const SizedBox(height: 12),
-          if (_featuredItems.isEmpty)
-            const SizedBox(height: 8)
+          if (_isLoadingListings && _homeListings.isEmpty)
+            const SizedBox(
+              height: 180,
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                ),
+              ),
+            )
+          else if (_listingsErrorMessage != null && _homeListings.isEmpty)
+            _HomeStatusCard(
+              icon: Icons.cloud_off_rounded,
+              title: 'Unable to load featured listings',
+              message: _listingsErrorMessage!,
+              actionLabel: 'Retry',
+              onAction: _loadHomeListings,
+            )
+          else if (_featuredListings.isEmpty)
+            const _SectionPlaceholder(
+              title: 'No featured listings yet.',
+              subtitle:
+                  'Browse listings will appear here once the backend has data.',
+            )
           else
             SizedBox(
               height: 180,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                itemCount: _featuredItems.length,
+                itemCount: _featuredListings.length,
                 separatorBuilder: (context, index) => const SizedBox(width: 12),
                 itemBuilder: (context, index) {
-                  return _FeaturedCard(item: _featuredItems[index]);
+                  final listing = _featuredListings[index];
+                  return _FeaturedCard(
+                    listing: listing,
+                    onTap: () => _openListing(listing),
+                  );
                 },
               ),
             ),
@@ -380,17 +523,36 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Recent Listings ───────────────────────────────────────────────────────────
   Widget _buildRecentListings() {
     return Padding(
       padding: const EdgeInsets.only(top: 24, left: 16, right: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('Recent Listings', 'View All'),
+        children: <Widget>[
+          _sectionTitle('Recent Listings'),
           const SizedBox(height: 12),
-          if (_recentListings.isEmpty)
-            const SizedBox(height: 8)
+          if (_isLoadingListings && _homeListings.isEmpty)
+            const SizedBox(
+              height: 180,
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(kNavy),
+                ),
+              ),
+            )
+          else if (_listingsErrorMessage != null && _homeListings.isEmpty)
+            _HomeStatusCard(
+              icon: Icons.cloud_off_rounded,
+              title: 'Unable to load recent listings',
+              message: _listingsErrorMessage!,
+              actionLabel: 'Retry',
+              onAction: _loadHomeListings,
+            )
+          else if (_recentListings.isEmpty)
+            const _SectionPlaceholder(
+              title: 'No recent listings yet.',
+              subtitle: 'Freshly approved listings will appear here.',
+            )
           else
             GridView.builder(
               shrinkWrap: true,
@@ -403,7 +565,11 @@ class _HomePageState extends State<HomePage> {
               ),
               itemCount: _recentListings.length,
               itemBuilder: (context, index) {
-                return _ListingCard(item: _recentListings[index]);
+                final listing = _recentListings[index];
+                return _ListingCard(
+                  listing: listing,
+                  onTap: () => _openListing(listing),
+                );
               },
             ),
         ],
@@ -411,11 +577,10 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Section Title Helper ──────────────────────────────────────────────────────
-  Widget _sectionTitle(String title, String action) {
+  Widget _sectionTitle(String title) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
+      children: <Widget>[
         Text(
           title,
           style: const TextStyle(
@@ -425,7 +590,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         GestureDetector(
-          onTap: () {},
+          onTap: _openBrowsePage,
           child: const Text(
             'View All',
             style: TextStyle(
@@ -440,7 +605,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Bottom Navigation ─────────────────────────────────────────────────────────
   Widget _buildBottomNav() {
     return BottomAppBar(
       color: kNavy,
@@ -450,7 +614,7 @@ class _HomePageState extends State<HomePage> {
         height: 60,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
+          children: <Widget>[
             _NavItem(
               icon: Icons.home_rounded,
               label: 'Home',
@@ -461,42 +625,20 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.explore_rounded,
               label: 'Browse',
               isActive: _selectedIndex == 1,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const BrowsePage()),
-                );
-              },
+              onTap: _openBrowsePage,
             ),
-            const SizedBox(width: 48), // FAB space
+            const SizedBox(width: 48),
             _NavItem(
               icon: Icons.favorite_rounded,
               label: 'Saved',
               isActive: _selectedIndex == 2,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FavoritesPage()),
-                );
-              },
+              onTap: () => _openAuthenticatedPage(const FavoritesPage()),
             ),
             _NavItem(
               icon: Icons.person_rounded,
               label: 'Profile',
               isActive: _selectedIndex == 3,
-              onTap: () {
-                if (AuthService().isLoggedIn) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProfilePage()),
-                  );
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                  );
-                }
-              },
+              onTap: () => _openAuthenticatedPage(const ProfilePage()),
             ),
           ],
         ),
@@ -509,36 +651,29 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: kGold,
       foregroundColor: kNavy,
       elevation: 6,
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AddListingPage()),
-        );
-      },
+      onPressed: () => _openAuthenticatedPage(const AddListingPage()),
       child: const Icon(Icons.add_rounded, size: 28),
     );
   }
 }
 
-// ─── Sub-Widgets ──────────────────────────────────────────────────────────────
-
 class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({required this.icon, required this.label});
+
   final IconData icon;
   final String label;
-
-  const _CategoryChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: [
+      children: <Widget>[
         Container(
           width: 48,
           height: 48,
           decoration: BoxDecoration(
             color: kNavy,
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [
+            boxShadow: <BoxShadow>[
               BoxShadow(
                 color: kNavy.withValues(alpha: 0.25),
                 blurRadius: 8,
@@ -562,21 +697,32 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
-class _FeaturedCard extends StatelessWidget {
-  final Map<String, dynamic> item;
+class _HomeStatusCard extends StatelessWidget {
+  const _HomeStatusCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
 
-  const _FeaturedCard({required this.item});
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final Future<void> Function({bool showLoading})? onAction;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 140,
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: kWhite,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -584,77 +730,76 @@ class _FeaturedCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 90,
-            decoration: BoxDecoration(
-              color: item['color'] as Color? ?? const Color(0xFFE3E8FF),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(icon, color: kNavy, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: kNavy,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          ),
+          if (actionLabel != null && onAction != null) ...<Widget>[
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => onAction!.call(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kNavy,
+                foregroundColor: kWhite,
+                elevation: 0,
+              ),
+              child: Text(actionLabel!),
             ),
-            child: Center(
-              child: Icon(
-                item['icon'] as IconData? ?? Icons.inventory_2,
-                size: 44,
-                color: kNavy.withValues(alpha: 0.5),
-              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionPlaceholder extends StatelessWidget {
+  const _SectionPlaceholder({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kWhite,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            title,
+            style: const TextStyle(
+              color: kNavy,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['title'] as String? ?? '',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: kNavy,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item['seller'] as String? ?? '',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      item['price'] as String? ?? '',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        color: kNavy,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kGold.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        item['tag'] as String? ?? '',
-                        style: const TextStyle(
-                          fontSize: 9,
-                          color: kNavy,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
         ],
       ),
@@ -662,107 +807,212 @@ class _FeaturedCard extends StatelessWidget {
   }
 }
 
-class _ListingCard extends StatelessWidget {
-  final Map<String, dynamic> item;
+class _FeaturedCard extends StatelessWidget {
+  const _FeaturedCard({required this.listing, required this.onTap});
 
-  const _ListingCard({required this.item});
+  final Listing listing;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: kWhite,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 140,
+        decoration: BoxDecoration(
+          color: kWhite,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.07),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              height: 90,
               decoration: BoxDecoration(
-                color: item['color'] as Color? ?? const Color(0xFFE3E8FF),
+                color: listing.color,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(16),
                 ),
               ),
               child: Center(
                 child: Icon(
-                  item['icon'] as IconData? ?? Icons.inventory_2,
-                  size: 40,
-                  color: kNavy.withValues(alpha: 0.45),
+                  listing.icon,
+                  size: 44,
+                  color: kNavy.withValues(alpha: 0.5),
                 ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['title'] as String? ?? '',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    color: kNavy,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      item['price'] as String? ?? '',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                        color: kNavy,
-                      ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    listing.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: kNavy,
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kNavy,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        item['condition'] as String? ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    listing.seller,
+                    style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      Text(
+                        listing.price,
                         style: const TextStyle(
-                          fontSize: 9,
-                          color: kGold,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: kNavy,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kGold.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          listing.category,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: kNavy,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ListingCard extends StatelessWidget {
+  const _ListingCard({required this.listing, required this.onTap});
+
+  final Listing listing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: kWhite,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: listing.color,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    listing.icon,
+                    size: 40,
+                    color: kNavy.withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    listing.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: kNavy,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      Text(
+                        listing.price,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: kNavy,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kNavy,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          listing.condition,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: kGold,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
   const _NavItem({
     required this.icon,
     required this.label,
@@ -770,13 +1020,18 @@ class _NavItem extends StatelessWidget {
     required this.onTap,
   });
 
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+        children: <Widget>[
           Icon(icon, color: isActive ? kGold : Colors.white54, size: 22),
           const SizedBox(height: 2),
           Text(

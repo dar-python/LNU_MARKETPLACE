@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'Inquiry_model.dart';
 import 'Inquiry_service.dart';
+import 'auth_service.dart';
 import 'core/network/api_client.dart';
+import 'login_page.dart';
 
 const kInquiryNavy = Color(0xFF0D1B6E);
 const kInquiryDarkNavy = Color(0xFF080F45);
@@ -28,6 +30,7 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
 
   late Inquiry _inquiry;
   bool _isLoading = true;
+  bool _isRedirectingToLogin = false;
   String? _errorMessage;
 
   @override
@@ -58,7 +61,15 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
         _isLoading = false;
       });
     } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
       if (!mounted) {
+        return;
+      }
+
+      if (sessionExpired) {
+        await _redirectToLogin();
         return;
       }
 
@@ -69,6 +80,20 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
             : _apiClient.mapError(error);
       });
     }
+  }
+
+  Future<void> _redirectToLogin() async {
+    if (_isRedirectingToLogin || !mounted) {
+      return;
+    }
+
+    _isRedirectingToLogin = true;
+    await Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => route.isFirst,
+    );
+    _isRedirectingToLogin = false;
   }
 
   @override
@@ -159,13 +184,34 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: kInquiryGold),
                         ),
-                        child: const Text(
-                          'Showing the latest available inquiry summary while the full detail request is unavailable.',
-                          style: TextStyle(
-                            color: kInquiryNavy,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Text(
+                              'Showing the latest available inquiry summary while the full detail request is unavailable.',
+                              style: TextStyle(
+                                color: kInquiryNavy,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _errorMessage!,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton(
+                              onPressed: _loadInquiry,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: kInquiryNavy,
+                              ),
+                              child: const Text('Retry'),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),

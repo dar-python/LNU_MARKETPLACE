@@ -135,7 +135,11 @@ class ApiClient {
     return null;
   }
 
-  String mapError(Object error) {
+  String mapError(
+    Object error, {
+    int maxMessages = 1,
+    bool includeFieldNames = false,
+  }) {
     if (error is DioException) {
       final statusCode = error.response?.statusCode;
       late final String mappedMessage;
@@ -158,7 +162,11 @@ class ApiClient {
         case DioExceptionType.cancel:
           mappedMessage = 'Request canceled.';
         case DioExceptionType.badResponse:
-          mappedMessage = _extractBackendMessage(error.response);
+          mappedMessage = _extractBackendMessage(
+            error.response,
+            maxMessages: maxMessages,
+            includeFieldNames: includeFieldNames,
+          );
         case DioExceptionType.unknown:
           if (error.error is SocketException) {
             mappedMessage = 'Network error. Please check your connection.';
@@ -191,6 +199,18 @@ class ApiClient {
     return error is DioException && error.response?.statusCode == 401;
   }
 
+  bool isNotFoundError(Object error) {
+    return statusCodeOf(error) == 404;
+  }
+
+  int? statusCodeOf(Object error) {
+    if (error is DioException) {
+      return error.response?.statusCode;
+    }
+
+    return null;
+  }
+
   String? extractErrorCode(Object error) {
     return _extractErrorMeta(error, 'code');
   }
@@ -199,27 +219,26 @@ class ApiClient {
     return _extractErrorMeta(error, 'identifier');
   }
 
-  String _extractBackendMessage(Response<dynamic>? response) {
+  String _extractBackendMessage(
+    Response<dynamic>? response, {
+    int maxMessages = 1,
+    bool includeFieldNames = false,
+  }) {
     final statusCode = response?.statusCode ?? 0;
     final data = response?.data;
 
-    if (data is Map<String, dynamic>) {
-      final dynamic message = data['message'];
-      final dynamic errors = data['errors'];
+    if (data is Map) {
+      final dataMap = Map<String, dynamic>.from(data);
+      final dynamic message = dataMap['message'];
+      final dynamic errors = dataMap['errors'];
+      final validationSummary = _summarizeBackendErrors(
+        errors,
+        maxMessages: maxMessages,
+        includeFieldNames: includeFieldNames,
+      );
 
-      if (errors is Map<String, dynamic> && errors.isNotEmpty) {
-        final entries = errors.entries
-            .where((entry) => entry.key != 'code' && entry.key != 'identifier')
-            .toList();
-        if (entries.isNotEmpty) {
-          final dynamic firstError = entries.first.value;
-          if (firstError is List && firstError.isNotEmpty) {
-            return firstError.first.toString();
-          }
-          if (firstError != null) {
-            return firstError.toString();
-          }
-        }
+      if (validationSummary != null) {
+        return validationSummary;
       }
 
       if (message is String && message.isNotEmpty) {
@@ -248,6 +267,89 @@ class ApiClient {
     }
 
     return 'Request failed (${statusCode == 0 ? 'no status' : statusCode}).';
+  }
+
+  String? _summarizeBackendErrors(
+    dynamic rawErrors, {
+    required int maxMessages,
+    required bool includeFieldNames,
+  }) {
+    if (rawErrors is! Map || rawErrors.isEmpty) {
+      return null;
+    }
+
+    final entries = Map<String, dynamic>.from(rawErrors).entries
+        .where((entry) => entry.key != 'code' && entry.key != 'identifier')
+        .toList();
+    if (entries.isEmpty) {
+      return null;
+    }
+
+    final messages = <String>[];
+    for (final entry in entries) {
+      final rawMessage = _firstErrorMessage(entry.value);
+      if (rawMessage == null || rawMessage.isEmpty) {
+        continue;
+      }
+
+      if (includeFieldNames) {
+        messages.add('${_humanizeFieldName(entry.key)}: $rawMessage');
+      } else {
+        messages.add(rawMessage);
+      }
+
+      if (messages.length >= maxMessages) {
+        break;
+      }
+    }
+
+    if (messages.isEmpty) {
+      return null;
+    }
+
+    final remainingCount = entries.length - messages.length;
+    if (remainingCount > 0) {
+      messages.add(
+        '+$remainingCount more error${remainingCount == 1 ? '' : 's'}',
+      );
+    }
+
+    return messages.join('\n');
+  }
+
+  String? _firstErrorMessage(dynamic rawValue) {
+    if (rawValue is List && rawValue.isNotEmpty) {
+      return rawValue.first?.toString().trim();
+    }
+
+    final value = rawValue?.toString().trim() ?? '';
+    if (value.isEmpty) {
+      return null;
+    }
+
+    return value;
+  }
+
+  String _humanizeFieldName(String value) {
+    final normalized = value
+        .replaceAll(RegExp(r'\[\d+\]'), '')
+        .replaceAll('_', ' ')
+        .replaceAll('.', ' ')
+        .trim();
+    if (normalized.isEmpty) {
+      return 'Field';
+    }
+
+    return normalized
+        .split(RegExp(r'\s+'))
+        .map((part) {
+          if (part.isEmpty) {
+            return part;
+          }
+
+          return part[0].toUpperCase() + part.substring(1);
+        })
+        .join(' ');
   }
 
   void _logMappedError({

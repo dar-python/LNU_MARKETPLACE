@@ -4,6 +4,7 @@ import 'auth_service.dart';
 import 'favorite_service.dart';
 import 'listing_detail_page.dart';
 import 'listing_model_page.dart';
+import 'login_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
@@ -20,6 +21,7 @@ class FavoritesPage extends StatefulWidget {
 class _FavoritesPageState extends State<FavoritesPage> {
   bool _isLoading = true;
   bool _isClearing = false;
+  bool _isRedirectingToLogin = false;
   String? _errorMessage;
 
   List<Listing> get _favorites => FavoritesService().favorites;
@@ -31,6 +33,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   Future<void> _loadFavorites({bool forceRefresh = false}) async {
+    if (!AuthService().hasSession) {
+      await _redirectToLogin();
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -41,6 +48,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
 
     if (!mounted) {
+      return;
+    }
+
+    if (!AuthService().hasSession) {
+      await _redirectToLogin();
       return;
     }
 
@@ -58,6 +70,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
 
     if (error != null) {
+      if (!AuthService().hasSession) {
+        await _redirectToLogin();
+        return;
+      }
+
       _showSnackBar(error);
       return;
     }
@@ -73,6 +90,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
         }
 
         if (undoError != null) {
+          if (!AuthService().hasSession) {
+            await _redirectToLogin();
+            return;
+          }
+
           _showSnackBar(undoError);
           return;
         }
@@ -93,6 +115,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
       return;
     }
 
+    if (!AuthService().hasSession) {
+      await _redirectToLogin();
+      return;
+    }
+
     setState(() {
       _isClearing = false;
       if (error == null) {
@@ -106,6 +133,20 @@ class _FavoritesPageState extends State<FavoritesPage> {
     }
 
     _showSnackBar('Favorites cleared.');
+  }
+
+  Future<void> _redirectToLogin() async {
+    if (_isRedirectingToLogin || !mounted) {
+      return;
+    }
+
+    _isRedirectingToLogin = true;
+    await Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => route.isFirst,
+    );
+    _isRedirectingToLogin = false;
   }
 
   void _showSnackBar(
@@ -273,7 +314,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       );
     }
 
-    if (!AuthService().isLoggedIn) {
+    if (!AuthService().hasSession) {
       return _buildEmptyState(
         icon: Icons.lock_outline_rounded,
         title: 'Login Required',
