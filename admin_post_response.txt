@@ -1,0 +1,24 @@
+HTTP/1.1 302 Found
+Server: nginx/1.29.5
+Content-Type: text/html; charset=utf-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+X-Powered-By: PHP/8.3.30
+Cache-Control: no-cache, private
+Date: Wed, 11 Mar 2026 01:51:20 GMT
+Location: http://127.0.0.1:8082/admin/login
+Set-Cookie: XSRF-TOKEN=eyJpdiI6ImlwRVcveFlZSDdQTHkzU0Irdko5akE9PSIsInZhbHVlIjoiMEhvOEZjVzUwUzgrdnFqSkdtZVpkakoyMjMwckFXTzNFU0J5eUhpSXVNekgvbmpJY1BIamxOdFRORW1nSXFFK0tkTDlPcFJVSUtSTld3VFZ2NlgreFEvY3FOWEtDTHZPNUd2akFOZ1V6RkFXMDBvZFcyTCtSTks5WWhvZzBiTUIiLCJtYWMiOiI2Mzc0MDY4MDNkN2FmY2RkMmJiZDM3NDdjMWQwNTEwNGEyNjQyOTZjNDgzODRlYjRkNTc0MzU2M2IzZGJjMzBhIiwidGFnIjoiIn0%3D; expires=Wed, 11 Mar 2026 03:51:20 GMT; Max-Age=7200; path=/; samesite=lax
+Set-Cookie: lnu-marketplace-session=eyJpdiI6Ii9ZVVFVQ20zUVA5TVBaZFJuYzVkUEE9PSIsInZhbHVlIjoick02eVhONHZ5TXFNeW50ZGc1R1F3Zm55TkMrdE5GM3VZYVcrNS9uNmhtL09JYzR1RURIa2J6dTUyaW1iVk9kWCtCWWNaNUtvaGluenpKLzlLZlJHZ1BSaDB5eCthNEEybzZVSVNsZWZGYkh2bkpKRm9BckpzNEJMVW8yd2pyaEsiLCJtYWMiOiJjMmU5MmNjOWI3MjM0MzBjODFiZDM4MWIyNTIwODJkNTQxNjdkYzQ5NGFiNjJlMTNlODgxOTA5Y2E1YTdhMmE5IiwidGFnIjoiIn0%3D; expires=Wed, 11 Mar 2026 03:51:20 GMT; Max-Age=7200; path=/; httponly; samesite=lax
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta http-equiv="refresh" content="0;url='http://127.0.0.1:8082/admin/login'" />
+
+        <title>Redirecting to http://127.0.0.1:8082/admin/login</title>
+    </head>
+    <body>
+        Redirecting to <a href="http://127.0.0.1:8082/admin/login">http://127.0.0.1:8082/admin/login</a>.
+    </body>
+</html>

@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Schema;
 
 class AdminUserSeeder extends Seeder
 {
+    private const FIXED_ADMIN_PASSWORD = 'admin123';
+
     /**
      * Run the database seeds.
      */
@@ -41,7 +43,7 @@ class AdminUserSeeder extends Seeder
             'student_id' => $studentId,
             'student_id_prefix' => $studentIdPrefix,
             'email' => $adminEmail,
-            'password' => bcrypt('password'),
+            'password' => self::FIXED_ADMIN_PASSWORD,
             'first_name' => 'Admin',
             'last_name' => 'Admin',
             'middle_name' => null,

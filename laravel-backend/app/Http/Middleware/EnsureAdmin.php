@@ -20,6 +20,10 @@ class EnsureAdmin
         $user = $request->user();
 
         if (! $user instanceof User || ! $this->isAdmin($user)) {
+            if (! $request->expectsJson() && ! $request->is('api/*')) {
+                abort(403);
+            }
+
             return ApiResponse::error('Forbidden.', null, 403);
         }
 
