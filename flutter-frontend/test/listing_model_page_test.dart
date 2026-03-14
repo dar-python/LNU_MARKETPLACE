@@ -26,6 +26,7 @@ void main() {
     expect(listing.seller, 'LNU Seller');
     expect(listing.listingStatus, 'available');
     expect(listing.campusLocation, 'Main Gate');
+    expect(listing.imageUrl, isNull);
   });
 
   test(
@@ -61,6 +62,7 @@ void main() {
       expect(listing.seller, 'Jane Doe');
       expect(listing.condition, 'Used');
       expect(listing.icon, Icons.menu_book_rounded);
+      expect(listing.imageUrl, isNull);
     },
   );
 
@@ -79,6 +81,14 @@ void main() {
             'price': '75.5',
             'item_condition': 'used',
             'listing_status': 'reserved',
+            'images': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'id': 55,
+                'image_path': 'listings/7/notebook.jpg',
+                'sort_order': 0,
+                'is_primary': true,
+              },
+            ],
           },
         ],
         'meta': <String, dynamic>{
@@ -95,6 +105,10 @@ void main() {
     expect(collection.listings.single.id, 7);
     expect(collection.listings.single.price, 'P75.50');
     expect(collection.listings.single.condition, 'Used');
+    expect(
+      collection.listings.single.imageUrl,
+      contains('/storage/listings/7/notebook.jpg'),
+    );
     expect(collection.pagination.currentPage, 2);
     expect(collection.pagination.perPage, 10);
     expect(collection.pagination.total, 12);
@@ -136,6 +150,7 @@ void main() {
 
     expect(detail.listing.category, 'Electronics');
     expect(detail.listing.condition, 'Used');
+    expect(detail.listing.imageUrl, contains('/storage/listings/9/cover.jpg'));
     expect(detail.images, hasLength(1));
     expect(detail.images.single.id, 77);
     expect(detail.images.single.imagePath, 'listings/9/cover.jpg');

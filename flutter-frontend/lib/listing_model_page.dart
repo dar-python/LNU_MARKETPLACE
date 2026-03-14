@@ -25,6 +25,7 @@ class Listing {
   final String sellerAvatar;
   final IconData icon;
   final Color color;
+  final String? imageUrl;
   final File? imageFile;
 
   const Listing({
@@ -48,6 +49,7 @@ class Listing {
     this.reviewedByUserId,
     this.reviewedByName = '',
     this.campusLocation = '',
+    this.imageUrl,
     this.imageFile,
   });
 
@@ -72,6 +74,7 @@ class Listing {
     String? sellerAvatar,
     IconData? icon,
     Color? color,
+    String? imageUrl,
     File? imageFile,
   }) {
     return Listing(
@@ -95,6 +98,7 @@ class Listing {
       sellerAvatar: sellerAvatar ?? this.sellerAvatar,
       icon: icon ?? this.icon,
       color: color ?? this.color,
+      imageUrl: imageUrl ?? this.imageUrl,
       imageFile: imageFile ?? this.imageFile,
     );
   }
@@ -320,6 +324,15 @@ class BackendListingAdapter {
       fallback: seed?.condition,
       category: resolvedCategory,
     );
+    final images = _imageListValue(json['images']);
+    String? resolvedImageUrl = seed?.imageUrl;
+    if (images.isNotEmpty) {
+      final firstImagePath = _stringValue(images.first['image_path']);
+      final publicImageUrl = _publicImageUrl(firstImagePath);
+      resolvedImageUrl = publicImageUrl.isNotEmpty
+          ? publicImageUrl
+          : seed?.imageUrl;
+    }
     final resolvedSeller = _resolveSeller(json, seed);
     final resolvedListingStatus = _stringValue(
       json['listing_status'],
@@ -378,6 +391,7 @@ class BackendListingAdapter {
       sellerAvatar: _sellerAvatarFromName(resolvedSeller),
       icon: categoryIcon(resolvedCategory),
       color: categoryColor(resolvedCategory),
+      imageUrl: resolvedImageUrl,
       imageFile: seed?.imageFile,
     );
 

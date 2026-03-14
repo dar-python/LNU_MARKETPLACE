@@ -5,6 +5,7 @@ import 'auth_service.dart';
 import 'browse_page.dart';
 import 'core/network/api_client.dart';
 import 'favorite_page.dart';
+import 'inquiry_page.dart';
 import 'listing_detail_page.dart';
 import 'listing_model_page.dart';
 import 'listing_service.dart';
@@ -320,7 +321,7 @@ class _HomePageState extends State<HomePage> {
             children: <Widget>[
               IconButton(
                 icon: const Icon(Icons.notifications_outlined, color: kWhite),
-                onPressed: () {},
+                onPressed: () => _openAuthenticatedPage(const InquiryPage()),
               ),
               Positioned(
                 top: 8,
@@ -958,6 +959,58 @@ class _SectionPlaceholder extends StatelessWidget {
   }
 }
 
+class _ListingImageThumbnail extends StatelessWidget {
+  const _ListingImageThumbnail({
+    required this.listing,
+    required this.borderRadius,
+    required this.iconSize,
+    required this.iconColor,
+  });
+
+  final Listing listing;
+  final BorderRadius borderRadius;
+  final double iconSize;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: ColoredBox(color: listing.color, child: _buildImage()),
+    );
+  }
+
+  Widget _buildImage() {
+    if (listing.imageUrl != null) {
+      return Image.network(
+        listing.imageUrl!,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
+      );
+    }
+
+    if (listing.imageFile != null) {
+      return Image.file(
+        listing.imageFile!,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
+      );
+    }
+
+    return _buildFallbackIcon();
+  }
+
+  Widget _buildFallbackIcon() {
+    return Center(
+      child: Icon(listing.icon, size: iconSize, color: iconColor),
+    );
+  }
+}
+
 class _FeaturedCard extends StatelessWidget {
   const _FeaturedCard({required this.listing, required this.onTap});
 
@@ -992,12 +1045,13 @@ class _FeaturedCard extends StatelessWidget {
                   top: Radius.circular(16),
                 ),
               ),
-              child: Center(
-                child: Icon(
-                  listing.icon,
-                  size: 44,
-                  color: kNavy.withValues(alpha: 0.5),
+              child: _ListingImageThumbnail(
+                listing: listing,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
                 ),
+                iconSize: 44,
+                iconColor: kNavy.withValues(alpha: 0.5),
               ),
             ),
             Padding(
@@ -1100,9 +1154,11 @@ class _MyListingCard extends StatelessWidget {
                     color: listing.color,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(
-                    listing.icon,
-                    color: kNavy.withValues(alpha: 0.65),
+                  child: _ListingImageThumbnail(
+                    listing: listing,
+                    borderRadius: BorderRadius.circular(14),
+                    iconSize: 24,
+                    iconColor: kNavy.withValues(alpha: 0.65),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1235,12 +1291,13 @@ class _ListingCard extends StatelessWidget {
                     top: Radius.circular(16),
                   ),
                 ),
-                child: Center(
-                  child: Icon(
-                    listing.icon,
-                    size: 40,
-                    color: kNavy.withValues(alpha: 0.45),
+                child: _ListingImageThumbnail(
+                  listing: listing,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
                   ),
+                  iconSize: 40,
+                  iconColor: kNavy.withValues(alpha: 0.45),
                 ),
               ),
             ),

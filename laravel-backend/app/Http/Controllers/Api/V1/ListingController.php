@@ -117,7 +117,10 @@ class ListingController extends Controller
             ->paginate($perPage);
 
         return ApiResponse::success('Listings retrieved successfully.', [
-            'listings' => $paginator->items(),
+            'listings' => array_map(
+                fn (Listing $listing): array => $this->serializeListingDetail($listing),
+                $paginator->items()
+            ),
             'meta' => [
                 'current_page' => $paginator->currentPage(),
                 'per_page' => $paginator->perPage(),
@@ -326,6 +329,7 @@ class ListingController extends Controller
     private function visibleListingsQuery(): Builder
     {
         $query = Listing::query()
+            ->with(['category:id,name,slug', 'listingImages'])
             ->whereIn('listing_status', self::BROWSE_VISIBLE_STATUSES)
             ->where('is_flagged', false);
 
@@ -347,6 +351,7 @@ class ListingController extends Controller
         return Listing::query()
             ->with([
                 'category:id,name,slug',
+                'listingImages',
                 'approvedByUser:id,first_name,middle_name,last_name',
             ])
             ->where('user_id', $userId);
@@ -421,6 +426,15 @@ class ListingController extends Controller
                 'name' => $listing->category->name,
                 'slug' => $listing->category->slug,
             ] : null,
+            'images' => array_map(
+                static fn (ListingImage $image): array => [
+                    'id' => $image->id,
+                    'image_path' => $image->image_path,
+                    'sort_order' => (int) $image->sort_order,
+                    'is_primary' => (bool) $image->is_primary,
+                ],
+                $listing->listingImages->all()
+            ),
             'approved_by_user_id' => $listing->approved_by_user_id === null ? null : (int) $listing->approved_by_user_id,
             'reviewed_at' => $listing->approved_at?->toISOString(),
             'approved_at' => $listing->approved_at?->toISOString(),
