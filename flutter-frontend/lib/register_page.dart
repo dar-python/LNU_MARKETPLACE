@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import 'auth_service.dart';
+import 'privacy_policy_page.dart';
 import 'verify_otp_page.dart';
 
 // ─── Color Palette ───────────────────────────────────────────────────────────
@@ -101,6 +103,15 @@ class _RegisterPageState extends State<RegisterPage> {
         ),
       );
     }
+  }
+
+  Future<void> _openPolicyPage(PolicySection section) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PolicyDetailsPage(initialSection: section),
+      ),
+    );
   }
 
   @override
@@ -262,39 +273,52 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(
-                            () => _agreedToPrivacy = !_agreedToPrivacy,
-                          ),
-                          child: RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                                height: 1.5,
-                              ),
-                              children: const [
-                                TextSpan(text: 'I have read and agree to the '),
-                                TextSpan(
-                                  text: 'Privacy Policy',
-                                  style: TextStyle(
-                                    color: kNavy,
-                                    fontWeight: FontWeight.w700,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                TextSpan(text: ' and '),
-                                TextSpan(
-                                  text: 'Terms of Service',
-                                  style: TextStyle(
-                                    color: kNavy,
-                                    fontWeight: FontWeight.w700,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                TextSpan(text: ' of LNU Marketplace.'),
-                              ],
+                        child: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                              height: 1.5,
                             ),
+                            children: <InlineSpan>[
+                              const TextSpan(
+                                text: 'I have read and agree to the ',
+                              ),
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: InkWell(
+                                  onTap: () =>
+                                      _openPolicyPage(PolicySection.privacy),
+                                  child: const Text(
+                                    'Privacy Policy',
+                                    style: TextStyle(
+                                      color: kNavy,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const TextSpan(text: ' and '),
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: InkWell(
+                                  onTap: () =>
+                                      _openPolicyPage(PolicySection.terms),
+                                  child: const Text(
+                                    'Terms of Service',
+                                    style: TextStyle(
+                                      color: kNavy,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const TextSpan(text: ' of LNU Marketplace.'),
+                            ],
                           ),
                         ),
                       ),

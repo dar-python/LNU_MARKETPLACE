@@ -330,6 +330,15 @@ class AuthService {
         .toString();
     final email = (rawUser['email'] ?? '').toString();
     final status = (rawUser['status'] ?? '').toString();
+    final contactNumber = (rawUser['contact_number'] ?? '').toString();
+    final program = (rawUser['program'] ?? '').toString();
+    final yearLevel = (rawUser['year_level'] ?? '').toString();
+    final organization = (rawUser['organization'] ?? '').toString();
+    final section = (rawUser['section'] ?? '').toString();
+    final bio = (rawUser['bio'] ?? '').toString();
+    final profilePicturePath =
+        (rawUser['profile_picture_path'] ?? rawUser['profile_photo_path'] ?? '')
+            .toString();
     final roles = rawUser['roles'] is List
         ? List<String>.from(
             (rawUser['roles'] as List).map((role) => role.toString()),
@@ -343,6 +352,13 @@ class AuthService {
       'email': email,
       'status': status,
       'roles': roles,
+      'contactNumber': contactNumber,
+      'program': program,
+      'yearLevel': yearLevel,
+      'organization': organization,
+      'section': section,
+      'bio': bio,
+      'profilePicturePath': profilePicturePath,
       'avatar': name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
     };
   }
