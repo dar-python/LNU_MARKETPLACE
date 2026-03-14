@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'home_page.dart'; 
+import 'home_page.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
 import 'register_page.dart';
@@ -17,14 +17,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'LNU Marketplace',
+      title: 'LNU Student Square',
       debugShowCheckedModeBanner: false,
       home: const HomePage(),
       routes: {
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
         '/profile': (context) => const ProfilePage(),
-      }, 
+      },
     );
   }
 }

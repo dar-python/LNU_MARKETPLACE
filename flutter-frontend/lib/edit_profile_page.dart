@@ -25,6 +25,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   XFile? _selectedImage;
   bool _isSaving = false;
+  late bool _isContactPublic;
+  late bool _isProgramPublic;
+  late bool _isYearLevelPublic;
+  late bool _isOrganizationPublic;
+  late bool _isSectionPublic;
+  late bool _isBioPublic;
 
   @override
   void initState() {
@@ -48,6 +54,32 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _bioController = TextEditingController(
       text: user?['bio']?.toString() ?? '',
     );
+    _isContactPublic = _privacySetting(
+      user,
+      'isContactPublic',
+      'is_contact_public',
+    );
+    _isProgramPublic = _privacySetting(
+      user,
+      'isProgramPublic',
+      'is_program_public',
+    );
+    _isYearLevelPublic = _privacySetting(
+      user,
+      'isYearLevelPublic',
+      'is_year_level_public',
+    );
+    _isOrganizationPublic = _privacySetting(
+      user,
+      'isOrganizationPublic',
+      'is_organization_public',
+    );
+    _isSectionPublic = _privacySetting(
+      user,
+      'isSectionPublic',
+      'is_section_public',
+    );
+    _isBioPublic = _privacySetting(user, 'isBioPublic', 'is_bio_public');
   }
 
   @override
@@ -102,6 +134,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
       organization: _organizationController.text,
       section: _sectionController.text,
       bio: _bioController.text,
+      isContactPublic: _isContactPublic,
+      isProgramPublic: _isProgramPublic,
+      isYearLevelPublic: _isYearLevelPublic,
+      isOrganizationPublic: _isOrganizationPublic,
+      isSectionPublic: _isSectionPublic,
+      isBioPublic: _isBioPublic,
       profilePicture: _selectedImage != null
           ? File(_selectedImage!.path)
           : null,
@@ -244,30 +282,47 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     label: 'Contact Number',
                     icon: Icons.phone_outlined,
                     keyboardType: TextInputType.phone,
+                    isPublic: _isContactPublic,
+                    onTogglePrivacy: () =>
+                        setState(() => _isContactPublic = !_isContactPublic),
                   ),
                   const SizedBox(height: 16),
                   _ProfileField(
                     controller: _programController,
                     label: 'Program',
                     icon: Icons.school_outlined,
+                    isPublic: _isProgramPublic,
+                    onTogglePrivacy: () =>
+                        setState(() => _isProgramPublic = !_isProgramPublic),
                   ),
                   const SizedBox(height: 16),
                   _ProfileField(
                     controller: _yearLevelController,
                     label: 'Year Level',
                     icon: Icons.calendar_today_outlined,
+                    isPublic: _isYearLevelPublic,
+                    onTogglePrivacy: () => setState(
+                      () => _isYearLevelPublic = !_isYearLevelPublic,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _ProfileField(
                     controller: _organizationController,
                     label: 'Organization',
                     icon: Icons.groups_outlined,
+                    isPublic: _isOrganizationPublic,
+                    onTogglePrivacy: () => setState(
+                      () => _isOrganizationPublic = !_isOrganizationPublic,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _ProfileField(
                     controller: _sectionController,
                     label: 'Section',
                     icon: Icons.badge_outlined,
+                    isPublic: _isSectionPublic,
+                    onTogglePrivacy: () =>
+                        setState(() => _isSectionPublic = !_isSectionPublic),
                   ),
                   const SizedBox(height: 16),
                   _ProfileField(
@@ -275,6 +330,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     label: 'Bio',
                     icon: Icons.edit_note_outlined,
                     maxLines: 3,
+                    isPublic: _isBioPublic,
+                    onTogglePrivacy: () =>
+                        setState(() => _isBioPublic = !_isBioPublic),
                   ),
                 ],
               ),
@@ -372,6 +430,38 @@ class _EditProfilePageState extends State<EditProfilePage> {
       '${AppConfig.baseUrl}/',
     ).resolve('storage/$relativePath').toString();
   }
+
+  bool _privacySetting(
+    Map<String, dynamic>? user,
+    String camelKey,
+    String snakeKey, {
+    bool fallback = true,
+  }) {
+    final value = user?[camelKey] ?? user?[snakeKey];
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is num) {
+      return value != 0;
+    }
+
+    final normalized = value?.toString().trim().toLowerCase();
+    switch (normalized) {
+      case '1':
+      case 'true':
+      case 'yes':
+      case 'on':
+        return true;
+      case '0':
+      case 'false':
+      case 'no':
+      case 'off':
+        return false;
+      default:
+        return fallback;
+    }
+  }
 }
 
 class _ProfileField extends StatelessWidget {
@@ -380,11 +470,15 @@ class _ProfileField extends StatelessWidget {
   final IconData icon;
   final TextInputType keyboardType;
   final int maxLines;
+  final bool isPublic;
+  final VoidCallback onTogglePrivacy;
 
   const _ProfileField({
     required this.controller,
     required this.label,
     required this.icon,
+    required this.isPublic,
+    required this.onTogglePrivacy,
     this.keyboardType = TextInputType.text,
     this.maxLines = 1,
   });
@@ -399,7 +493,16 @@ class _ProfileField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: kNavy, fontWeight: FontWeight.w600),
+        alignLabelWithHint: maxLines > 1,
         prefixIcon: Icon(icon, color: kNavy),
+        suffixIcon: IconButton(
+          onPressed: onTogglePrivacy,
+          tooltip: isPublic ? '$label is public' : '$label is private',
+          icon: Icon(
+            isPublic ? Icons.public : Icons.lock,
+            color: isPublic ? Colors.green : Colors.grey,
+          ),
+        ),
         filled: true,
         fillColor: const Color(0xFFF7F8FD),
         contentPadding: const EdgeInsets.symmetric(

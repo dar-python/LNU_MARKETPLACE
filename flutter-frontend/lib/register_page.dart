@@ -159,7 +159,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Join the LNU Marketplace',
+                    'Join LNU Student Square',
                     style: TextStyle(
                       color: kGold,
                       fontSize: 12,
@@ -317,7 +317,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   ),
                                 ),
                               ),
-                              const TextSpan(text: ' of LNU Marketplace.'),
+                              const TextSpan(text: ' of LNU Student Square.'),
                             ],
                           ),
                         ),

@@ -290,6 +290,12 @@ class AuthService {
     String? organization,
     String? section,
     String? bio,
+    bool? isContactPublic,
+    bool? isProgramPublic,
+    bool? isYearLevelPublic,
+    bool? isOrganizationPublic,
+    bool? isSectionPublic,
+    bool? isBioPublic,
     File? profilePicture,
   }) async {
     try {
@@ -312,6 +318,24 @@ class AuthService {
       }
       if (bio != null) {
         formMap['bio'] = bio.trim();
+      }
+      if (isContactPublic != null) {
+        formMap['is_contact_public'] = isContactPublic;
+      }
+      if (isProgramPublic != null) {
+        formMap['is_program_public'] = isProgramPublic;
+      }
+      if (isYearLevelPublic != null) {
+        formMap['is_year_level_public'] = isYearLevelPublic;
+      }
+      if (isOrganizationPublic != null) {
+        formMap['is_organization_public'] = isOrganizationPublic;
+      }
+      if (isSectionPublic != null) {
+        formMap['is_section_public'] = isSectionPublic;
+      }
+      if (isBioPublic != null) {
+        formMap['is_bio_public'] = isBioPublic;
       }
       if (profilePicture != null) {
         formMap['profile_picture'] = await MultipartFile.fromFile(
@@ -407,6 +431,30 @@ class AuthService {
     final profilePicturePath =
         (rawUser['profile_picture_path'] ?? rawUser['profile_photo_path'] ?? '')
             .toString();
+    final isContactPublic = _normalizeBooleanValue(
+      rawUser['is_contact_public'] ?? rawUser['isContactPublic'],
+      fallback: false,
+    );
+    final isProgramPublic = _normalizeBooleanValue(
+      rawUser['is_program_public'] ?? rawUser['isProgramPublic'],
+      fallback: true,
+    );
+    final isYearLevelPublic = _normalizeBooleanValue(
+      rawUser['is_year_level_public'] ?? rawUser['isYearLevelPublic'],
+      fallback: true,
+    );
+    final isOrganizationPublic = _normalizeBooleanValue(
+      rawUser['is_organization_public'] ?? rawUser['isOrganizationPublic'],
+      fallback: true,
+    );
+    final isSectionPublic = _normalizeBooleanValue(
+      rawUser['is_section_public'] ?? rawUser['isSectionPublic'],
+      fallback: true,
+    );
+    final isBioPublic = _normalizeBooleanValue(
+      rawUser['is_bio_public'] ?? rawUser['isBioPublic'],
+      fallback: true,
+    );
     final roles = rawUser['roles'] is List
         ? List<String>.from(
             (rawUser['roles'] as List).map((role) => role.toString()),
@@ -428,6 +476,18 @@ class AuthService {
       'organization': organization,
       'section': section,
       'bio': bio,
+      'isContactPublic': isContactPublic,
+      'is_contact_public': isContactPublic,
+      'isProgramPublic': isProgramPublic,
+      'is_program_public': isProgramPublic,
+      'isYearLevelPublic': isYearLevelPublic,
+      'is_year_level_public': isYearLevelPublic,
+      'isOrganizationPublic': isOrganizationPublic,
+      'is_organization_public': isOrganizationPublic,
+      'isSectionPublic': isSectionPublic,
+      'is_section_public': isSectionPublic,
+      'isBioPublic': isBioPublic,
+      'is_bio_public': isBioPublic,
       'profilePicturePath': profilePicturePath,
       'profile_picture_path': profilePicturePath,
       'avatar': name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
@@ -460,6 +520,32 @@ class AuthService {
     }
 
     return <String, dynamic>{'student_id': identifier, 'password': password};
+  }
+
+  bool _normalizeBooleanValue(Object? value, {required bool fallback}) {
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is num) {
+      return value != 0;
+    }
+
+    final normalized = value?.toString().trim().toLowerCase();
+    switch (normalized) {
+      case '1':
+      case 'true':
+      case 'yes':
+      case 'on':
+        return true;
+      case '0':
+      case 'false':
+      case 'no':
+      case 'off':
+        return false;
+      default:
+        return fallback;
+    }
   }
 
   Future<void> _clearLocalSession() async {
