@@ -1,4 +1,12 @@
-# LNU Marketplace
+# LNU Student Square
+
+This repository contains the IT-105 Mobile Development project finalized as
+`LNU Student Square`.
+
+The authoritative scope is documented in [FINAL_SCOPE.md](FINAL_SCOPE.md).
+Some package names, environment defaults, and internal identifiers still use
+the earlier working title `LNU Marketplace`; they are being left in place
+unless a scope-alignment change specifically requires otherwise.
 
 This repository contains:
 

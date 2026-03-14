@@ -1,4 +1,7 @@
-# LNU Marketplace Flutter + Laravel (Dev Run Guide)
+# LNU Student Square Flutter + Laravel (Dev Run Guide)
+
+This guide belongs to the `LNU Student Square` project. Legacy Flutter package
+names may still use `flutter_lnu_marketplace` to avoid unnecessary refactors.
 
 ## A) Prerequisites
 
