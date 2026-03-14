@@ -1,4 +1,4 @@
-import 'Inquiry_model.dart';
+import 'inquiry_model.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
 import 'listing_model_page.dart';

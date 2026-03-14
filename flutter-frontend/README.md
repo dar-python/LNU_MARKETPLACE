@@ -82,10 +82,12 @@ flutter run --dart-define=API_BASE_URL=http://<LAN_IP>:8082
 - Android emulator cannot use `localhost` for host machine; use `10.0.2.2`.
 - Physical device can use `127.0.0.1` only when `adb reverse tcp:8082 tcp:8082` is active.
 - Without `adb reverse`, physical device must use host LAN IP, not `localhost`.
+- Do not use the phone's own Wi-Fi IP as `API_BASE_URL`; on a physical device it must point to the computer running Docker, typically `http://<computer_LAN_IP>:8082`.
 - If requests fail immediately, confirm containers are up: `docker compose ps`.
 - If port conflict occurs, free or remap `8082/3307/8083`.
 - Ensure backend `.env` uses `DB_HOST=db` (not `localhost`) in Docker.
-- Android HTTP cleartext is enabled in debug manifest only; release should use HTTPS.
+- This repo exposes the backend on `:8082` by default; if the app shows a different port, rebuild with the correct `--dart-define=API_BASE_URL=...` or start the backend on that port.
+- Android builds now allow HTTP for local-device testing; prefer HTTPS before shipping to production.
 - If auth fails unexpectedly, clear app storage/token and log in again.
 - If tests fail in container, run from repo root with Docker DB up.
 

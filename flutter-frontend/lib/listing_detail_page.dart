@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'Inquiry_service.dart';
+import 'inquiry_service.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
 import 'favorite_service.dart';
