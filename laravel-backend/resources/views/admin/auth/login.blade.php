@@ -19,7 +19,7 @@
                     autocomplete="username"
                     required
                 >
-                <p class="helper">Use an existing admin email address or student ID.</p>
+                <p class="helper">Use an existing admin user.</p>
             </div>
 
             <div class="field">
