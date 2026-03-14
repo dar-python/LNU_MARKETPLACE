@@ -318,6 +318,7 @@ class BackendListingAdapter {
     final resolvedCondition = _conditionLabelFromApi(
       json['item_condition'],
       fallback: seed?.condition,
+      category: resolvedCategory,
     );
     final resolvedSeller = _resolveSeller(json, seed);
     final resolvedListingStatus = _stringValue(
@@ -551,7 +552,46 @@ const List<BackendListingCategory> _backendListingCategories =
           'accessories',
         ],
       ),
+      BackendListingCategory(
+        id: 7,
+        name: 'Tutoring',
+        slug: 'tutoring',
+        aliases: <String>['tutoring'],
+      ),
+      BackendListingCategory(
+        id: 8,
+        name: 'Editing',
+        slug: 'editing',
+        aliases: <String>['editing'],
+      ),
+      BackendListingCategory(
+        id: 9,
+        name: 'Design',
+        slug: 'design',
+        aliases: <String>['design'],
+      ),
+      BackendListingCategory(
+        id: 10,
+        name: 'Commission',
+        slug: 'commission',
+        aliases: <String>['commission', 'commissions'],
+      ),
+      BackendListingCategory(
+        id: 11,
+        name: 'Repair',
+        slug: 'repair',
+        aliases: <String>['repair'],
+      ),
     ];
+
+const Set<String> _serviceListingCategories = <String>{
+  'Tutoring',
+  'Editing',
+  'Design',
+  'Commission',
+  'Repair',
+  'Services',
+};
 
 // The frontend exposes broader shopper-friendly labels than the current
 // backend taxonomy, so we map them to the closest supported backend category
@@ -599,20 +639,18 @@ String normalizeListingConditionLabel(String label) {
     case 'brand new':
     case 'brandnew':
     case 'new':
-      return 'Brand New';
+      return 'New';
     case 'pre-owned':
     case 'preowned':
     case 'used':
     case 'good':
     case 'like new':
     case 'like_new':
-      return 'Pre-owned';
     case 'fair':
-      return 'Fair';
     case 'poor':
-      return 'Poor';
+      return 'Used';
     default:
-      return label.trim().isNotEmpty ? label.trim() : 'Pre-owned';
+      return label.trim();
   }
 }
 
@@ -621,9 +659,9 @@ String backendItemConditionForLabel(String label) {
     case 'brand new':
     case 'brandnew':
     case 'new':
-      return 'brandnew';
+      return 'new';
     default:
-      return 'preowned';
+      return 'used';
   }
 }
 
@@ -643,6 +681,16 @@ IconData categoryIcon(String category) {
       return Icons.backpack_rounded;
     case 'Services':
       return Icons.miscellaneous_services_rounded;
+    case 'Tutoring':
+      return Icons.school_rounded;
+    case 'Editing':
+      return Icons.edit_note_rounded;
+    case 'Design':
+      return Icons.brush_rounded;
+    case 'Commission':
+      return Icons.draw_rounded;
+    case 'Repair':
+      return Icons.build_rounded;
     case 'Clothing':
       return Icons.checkroom_rounded;
     case 'Electronics':
@@ -682,6 +730,16 @@ Color categoryColor(String category) {
       return const Color(0xFFE8ECFF);
     case 'Services':
       return const Color(0xFFFFF8E8);
+    case 'Tutoring':
+      return const Color(0xFFE8F4FF);
+    case 'Editing':
+      return const Color(0xFFF2EEFF);
+    case 'Design':
+      return const Color(0xFFFFF1E8);
+    case 'Commission':
+      return const Color(0xFFFFF8E8);
+    case 'Repair':
+      return const Color(0xFFE8FFF7);
     case 'Clothing':
       return const Color(0xFFFFEECC);
     case 'Electronics':
@@ -751,26 +809,36 @@ String _priceLabelFromApi(dynamic rawValue, {String? fallback}) {
   return value.startsWith('P') ? value : 'P$value';
 }
 
-String _conditionLabelFromApi(dynamic rawValue, {String? fallback}) {
+String _conditionLabelFromApi(
+  dynamic rawValue, {
+  String? fallback,
+  String? category,
+}) {
   switch (_normalizeLookupValue(rawValue?.toString() ?? '')) {
     case 'brandnew':
     case 'brand new':
     case 'new':
-      return 'Brand New';
+      return 'New';
     case 'preowned':
     case 'pre-owned':
     case 'used':
     case 'good':
     case 'like_new':
     case 'like new':
-      return 'Pre-owned';
     case 'fair':
-      return 'Fair';
     case 'poor':
-      return 'Poor';
+      return 'Used';
     default:
+      if (_isServiceListingCategory(category)) {
+        return '';
+      }
+
       return normalizeListingConditionLabel(fallback ?? '');
   }
+}
+
+bool _isServiceListingCategory(String? category) {
+  return category != null && _serviceListingCategories.contains(category);
 }
 
 String _resolveItemStatus(dynamic rawValue, {String fallback = ''}) {

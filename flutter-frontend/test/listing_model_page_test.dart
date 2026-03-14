@@ -11,7 +11,7 @@ void main() {
       'title': 'Physics Book',
       'description': 'Used for one semester',
       'price': '120',
-      'item_condition': 'brandnew',
+      'item_condition': 'new',
       'listing_status': 'available',
       'campus_location': 'Main Gate',
     });
@@ -21,7 +21,7 @@ void main() {
     expect(listing.categoryId, 2);
     expect(listing.title, 'Physics Book');
     expect(listing.price, 'P120.00');
-    expect(listing.condition, 'Brand New');
+    expect(listing.condition, 'New');
     expect(listing.category, 'Books');
     expect(listing.seller, 'LNU Seller');
     expect(listing.listingStatus, 'available');
@@ -40,7 +40,7 @@ void main() {
         title: 'Physics Book',
         price: 'P120.00',
         category: 'Books',
-        condition: 'Pre-owned',
+        condition: 'Used',
         description: 'Used for one semester',
         seller: 'Jane Doe',
         sellerAvatar: 'J',
@@ -59,7 +59,7 @@ void main() {
 
       expect(listing.category, 'Books');
       expect(listing.seller, 'Jane Doe');
-      expect(listing.condition, 'Pre-owned');
+      expect(listing.condition, 'Used');
       expect(listing.icon, Icons.menu_book_rounded);
     },
   );
@@ -77,7 +77,7 @@ void main() {
             'title': 'Notebook',
             'description': 'Slightly used',
             'price': '75.5',
-            'item_condition': 'preowned',
+            'item_condition': 'used',
             'listing_status': 'reserved',
           },
         ],
@@ -94,7 +94,7 @@ void main() {
     expect(collection.listings, hasLength(1));
     expect(collection.listings.single.id, 7);
     expect(collection.listings.single.price, 'P75.50');
-    expect(collection.listings.single.condition, 'Pre-owned');
+    expect(collection.listings.single.condition, 'Used');
     expect(collection.pagination.currentPage, 2);
     expect(collection.pagination.perPage, 10);
     expect(collection.pagination.total, 12);
@@ -113,7 +113,7 @@ void main() {
           'title': 'Tablet',
           'description': 'Lightly used tablet',
           'price': '9500.00',
-          'item_condition': 'preowned',
+          'item_condition': 'used',
           'listing_status': 'available',
           'campus_location': 'LNU Main Campus',
           'category': <String, dynamic>{
@@ -135,7 +135,7 @@ void main() {
     });
 
     expect(detail.listing.category, 'Electronics');
-    expect(detail.listing.condition, 'Pre-owned');
+    expect(detail.listing.condition, 'Used');
     expect(detail.images, hasLength(1));
     expect(detail.images.single.id, 77);
     expect(detail.images.single.imagePath, 'listings/9/cover.jpg');

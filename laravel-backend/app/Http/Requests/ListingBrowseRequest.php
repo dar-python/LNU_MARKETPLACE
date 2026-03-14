@@ -24,7 +24,7 @@ class ListingBrowseRequest extends FormRequest
             'category_id' => ['nullable', 'integer', 'exists:categories,id'],
             'min_price' => ['nullable', 'numeric', 'min:0'],
             'max_price' => ['nullable', 'numeric', 'min:0', 'gte:min_price'],
-            'condition' => ['nullable', 'string', Rule::in(['brandnew', 'preowned'])],
+            'condition' => ['nullable', 'string', Rule::in(['new', 'used'])],
             'status' => ['nullable', 'string', Rule::in(['available', 'reserved', 'sold'])],
             'sort_by' => ['nullable', 'string', Rule::in(['newest', 'oldest', 'price_asc', 'price_desc', 'title_asc', 'title_desc'])],
             'sort_dir' => ['nullable', 'string', Rule::in(['asc', 'desc'])],

@@ -553,7 +553,9 @@ class _FavoriteCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: listing.condition == 'New'
                                 ? Colors.green.shade100
-                                : listing.condition == 'Good'
+                                : listing.condition == 'Used' ||
+                                      listing.condition == 'Good' ||
+                                      listing.condition == 'Pre-owned'
                                 ? Colors.blue.shade100
                                 : Colors.orange.shade100,
                             borderRadius: BorderRadius.circular(8),
@@ -563,7 +565,9 @@ class _FavoriteCard extends StatelessWidget {
                             style: TextStyle(
                               color: listing.condition == 'New'
                                   ? Colors.green.shade700
-                                  : listing.condition == 'Good'
+                                  : listing.condition == 'Used' ||
+                                        listing.condition == 'Good' ||
+                                        listing.condition == 'Pre-owned'
                                   ? Colors.blue.shade700
                                   : Colors.orange.shade700,
                               fontSize: 9,

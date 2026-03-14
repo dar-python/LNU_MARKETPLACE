@@ -629,8 +629,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   Color _conditionBackgroundColor(String condition) {
     switch (condition) {
+      case 'New':
       case 'Brand New':
         return Colors.green.shade100;
+      case 'Used':
       case 'Pre-owned':
         return Colors.blue.shade100;
       default:
@@ -640,8 +642,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   Color _conditionTextColor(String condition) {
     switch (condition) {
+      case 'New':
       case 'Brand New':
         return Colors.green.shade700;
+      case 'Used':
       case 'Pre-owned':
         return Colors.blue.shade700;
       default:
