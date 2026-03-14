@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 
@@ -281,6 +283,72 @@ class AuthService {
     }
   }
 
+  Future<String?> updateProfile({
+    String? contactNumber,
+    String? program,
+    String? yearLevel,
+    String? organization,
+    String? section,
+    String? bio,
+    File? profilePicture,
+  }) async {
+    try {
+      final formMap = <String, dynamic>{};
+
+      if (contactNumber != null) {
+        formMap['contact_number'] = contactNumber.trim();
+      }
+      if (program != null) {
+        formMap['program'] = program.trim();
+      }
+      if (yearLevel != null) {
+        formMap['year_level'] = yearLevel.trim();
+      }
+      if (organization != null) {
+        formMap['organization'] = organization.trim();
+      }
+      if (section != null) {
+        formMap['section'] = section.trim();
+      }
+      if (bio != null) {
+        formMap['bio'] = bio.trim();
+      }
+      if (profilePicture != null) {
+        formMap['profile_picture'] = await MultipartFile.fromFile(
+          profilePicture.path,
+          filename: profilePicture.path.split(Platform.pathSeparator).last,
+        );
+      }
+
+      final response = await _apiClient.dio.post(
+        '/api/v1/auth/update-profile',
+        data: FormData.fromMap(formMap),
+        options: Options(contentType: 'multipart/form-data'),
+      );
+
+      final rawUser = _apiClient.extractDataItemMap(response.data, 'user');
+      if (rawUser == null) {
+        return 'Invalid user payload.';
+      }
+
+      _lastResponseMessage = _apiClient.extractMessage(response.data);
+      _currentUser = _normalizeUser(rawUser);
+      _hasSessionToken = true;
+      return null;
+    } catch (error) {
+      final message = _apiClient.mapError(
+        error,
+        maxMessages: 3,
+        includeFieldNames: true,
+      );
+      if (await clearSessionIfUnauthorized(error)) {
+        return message;
+      }
+
+      return message;
+    }
+  }
+
   Future<void> logout() async {
     try {
       final response = await _apiClient.dio.post('/api/v1/auth/logout');
@@ -353,12 +421,15 @@ class AuthService {
       'status': status,
       'roles': roles,
       'contactNumber': contactNumber,
+      'contact_number': contactNumber,
       'program': program,
       'yearLevel': yearLevel,
+      'year_level': yearLevel,
       'organization': organization,
       'section': section,
       'bio': bio,
       'profilePicturePath': profilePicturePath,
+      'profile_picture_path': profilePicturePath,
       'avatar': name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?',
     };
   }

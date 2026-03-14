@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'add_listing_page.dart';
 import 'auth_service.dart';
 import 'browse_page.dart';
+import 'config/app_config.dart';
 import 'core/network/api_client.dart';
 import 'favorite_page.dart';
 import 'inquiry_page.dart';
@@ -209,6 +210,65 @@ class _HomePageState extends State<HomePage> {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
+  String _profileImageUrl(Map<String, dynamic>? user) {
+    final rawPath =
+        user?['profilePicturePath']?.toString().trim() ??
+        user?['profile_picture_path']?.toString().trim() ??
+        '';
+
+    if (rawPath.isEmpty) {
+      return '';
+    }
+
+    final parsedUri = Uri.tryParse(rawPath);
+    if (parsedUri != null && parsedUri.hasScheme) {
+      return rawPath;
+    }
+
+    final relativePath = rawPath.startsWith('/')
+        ? rawPath.substring(1)
+        : rawPath;
+
+    return Uri.parse(
+      '${AppConfig.baseUrl}/',
+    ).resolve('storage/$relativePath').toString();
+  }
+
+  Widget _buildHeaderAvatar(Map<String, dynamic>? currentUser) {
+    final avatarLabel = currentUser?['avatar']?.toString().trim();
+    final imageUrl = _profileImageUrl(currentUser);
+
+    return CircleAvatar(
+      radius: 16,
+      backgroundColor: kGold,
+      child: ClipOval(
+        child: SizedBox.expand(
+          child: imageUrl.isNotEmpty
+              ? Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) =>
+                      _buildHeaderAvatarFallback(avatarLabel),
+                )
+              : _buildHeaderAvatarFallback(avatarLabel),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderAvatarFallback(String? avatarLabel) {
+    if (avatarLabel == null || avatarLabel.isEmpty) {
+      return const Icon(Icons.person, color: kNavy, size: 18);
+    }
+
+    return Center(
+      child: Text(
+        avatarLabel,
+        style: const TextStyle(color: kNavy, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -267,7 +327,6 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildHeader() {
     final currentUser = AuthService().currentUser;
-    final avatarLabel = currentUser?['avatar']?.toString().trim();
 
     return Container(
       color: kNavy,
@@ -337,19 +396,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: kGold,
-            child: avatarLabel == null || avatarLabel.isEmpty
-                ? const Icon(Icons.person, color: kNavy, size: 18)
-                : Text(
-                    avatarLabel,
-                    style: const TextStyle(
-                      color: kNavy,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-          ),
+          _buildHeaderAvatar(currentUser),
         ],
       ),
     );

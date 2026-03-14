@@ -13,7 +13,7 @@ import 'my_listings_page.dart' show MyListingsPage;
 import 'privacy_policy_page.dart';
 import 'purchase_history_page.dart';
 import 'settings_page.dart';
-import 'terms_of_service_page.dart';
+import 'config/app_config.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -107,6 +107,90 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _openPage(Widget page) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _user = AuthService().currentUser;
+    });
+  }
+
+  String _profileImageUrl(Map<String, dynamic>? user) {
+    final rawPath =
+        user?['profilePicturePath']?.toString().trim() ??
+        user?['profile_picture_path']?.toString().trim() ??
+        '';
+
+    if (rawPath.isEmpty) {
+      return '';
+    }
+
+    final parsedUri = Uri.tryParse(rawPath);
+    if (parsedUri != null && parsedUri.hasScheme) {
+      return rawPath;
+    }
+
+    final relativePath = rawPath.startsWith('/')
+        ? rawPath.substring(1)
+        : rawPath;
+
+    return Uri.parse(
+      '${AppConfig.baseUrl}/',
+    ).resolve('storage/$relativePath').toString();
+  }
+
+  Widget _buildProfileAvatar(Map<String, dynamic>? user) {
+    final imageUrl = _profileImageUrl(user);
+
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: kGold,
+        border: Border.all(color: kWhite, width: 3),
+      ),
+      child: ClipOval(
+        child: imageUrl.isNotEmpty
+            ? Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _buildAvatarFallback(user),
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) {
+                    return child;
+                  }
+
+                  return const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: kNavy,
+                      ),
+                    ),
+                  );
+                },
+              )
+            : _buildAvatarFallback(user),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback(Map<String, dynamic>? user) {
+    return Center(
+      child: Text(
+        user?['avatar'] ?? '?',
+        style: const TextStyle(
+          color: kNavy,
+          fontSize: 32,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
   }
 
   @override
@@ -117,6 +201,16 @@ class _ProfilePageState extends State<ProfilePage> {
         : user?['name'] ?? 'Profile unavailable';
     final displayEmail = user?['email']?.toString() ?? '';
     final displayStudentId = user?['studentId']?.toString() ?? 'N/A';
+    final program = user?['program']?.toString().trim() ?? '';
+    final yearLevel = user?['yearLevel']?.toString().trim() ?? '';
+    final section = user?['section']?.toString().trim() ?? '';
+    final contactNumber = user?['contactNumber']?.toString().trim() ?? '';
+    final bio = user?['bio']?.toString().trim() ?? '';
+    final academicSummary = <String>[
+      program,
+      yearLevel,
+      section,
+    ].where((value) => value.isNotEmpty).join(' - ');
     final statusCode = AuthService().lastPingStatusCode;
     final pingBody = AuthService().lastPingBody;
     final pingError = AuthService().lastPingError;
@@ -185,26 +279,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Avatar
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: kGold,
-                        border: Border.all(color: kWhite, width: 3),
-                      ),
-                      child: Center(
-                        child: Text(
-                          user?['avatar'] ?? '?',
-                          style: const TextStyle(
-                            color: kNavy,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildProfileAvatar(user),
                     const SizedBox(height: 14),
                     Text(
                       displayName,
@@ -219,6 +294,29 @@ class _ProfilePageState extends State<ProfilePage> {
                       displayEmail,
                       style: const TextStyle(color: kGold, fontSize: 12),
                     ),
+                    if (academicSummary.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 10),
+                      Text(
+                        academicSummary,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: kWhite.withValues(alpha: 0.92),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (contactNumber.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        contactNumber,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: kWhite.withValues(alpha: 0.78),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -238,6 +336,32 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
                     ),
+                    if (bio.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kWhite.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          bio,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: kWhite.withValues(alpha: 0.9),
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
                     if (_isLoadingProfile) ...<Widget>[
                       const SizedBox(height: 12),
                       const SizedBox(
@@ -466,13 +590,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     _MenuItem(
                       icon: Icons.privacy_tip_outlined,
-                      label: 'Privacy Policy',
+                      label: 'Privacy Policy & Terms',
                       onTap: () => _openPage(const PrivacyPolicyPage()),
-                    ),
-                    _MenuItem(
-                      icon: Icons.description_outlined,
-                      label: 'Terms of Service',
-                      onTap: () => _openPage(const TermsOfServicePage()),
                     ),
                     const SizedBox(height: 20),
                     _MenuItem(
