@@ -18,7 +18,6 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _usernameController = TextEditingController();
   final _studentIdController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -28,14 +27,11 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isLoading = false;
   bool _agreedToPrivacy = false;
   String? _errorMessage;
-  DateTime? _selectedBirthdate;
-  String? _selectedGender;
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _usernameController.dispose();
     _studentIdController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -84,7 +80,6 @@ class _RegisterPageState extends State<RegisterPage> {
     final error = await AuthService().register(
       name: name,
       email: email,
-      username: _usernameController.text.trim(),
       password: password,
       studentId: studentId,
     );
@@ -182,16 +177,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Username
-                  _buildLabel('Username'),
-                  const SizedBox(height: 8),
-                  _buildTextField(
-                    controller: _usernameController,
-                    hint: 'Enter your username',
-                    icon: Icons.account_circle_outlined,
-                  ),
-                  const SizedBox(height: 14),
-
                   // Student ID
                   _buildLabel('Student ID'),
                   const SizedBox(height: 8),
@@ -200,155 +185,6 @@ class _RegisterPageState extends State<RegisterPage> {
                     hint: 'e.g. 2301234',
                     icon: Icons.badge_outlined,
                     keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Birthdate
-                  _buildLabel('Birthdate'),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime(2000),
-                        firstDate: DateTime(1970),
-                        lastDate: DateTime.now(),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: const ColorScheme.light(
-                                primary: kNavy,
-                                onPrimary: kWhite,
-                                onSurface: kNavy,
-                              ),
-                            ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setState(() => _selectedBirthdate = picked);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kWhite,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.cake_outlined,
-                            color: kNavy,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            _selectedBirthdate == null
-                                ? 'Select your birthdate'
-                                : '${_selectedBirthdate!.month}/${_selectedBirthdate!.day}/${_selectedBirthdate!.year}',
-                            style: TextStyle(
-                              color: _selectedBirthdate == null
-                                  ? Colors.grey[400]
-                                  : kNavy,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const Spacer(),
-                          Icon(
-                            Icons.calendar_today_outlined,
-                            color: Colors.grey[400],
-                            size: 16,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Gender
-                  _buildLabel('Gender'),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kWhite,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedGender,
-                        isExpanded: true,
-                        hint: Row(
-                          children: [
-                            const Icon(
-                              Icons.wc_outlined,
-                              color: kNavy,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Select gender',
-                              style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                        icon: Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.grey[400],
-                        ),
-                        items: ['Male', 'Female', 'Prefer not to say'].map((
-                          gender,
-                        ) {
-                          return DropdownMenuItem(
-                            value: gender,
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.wc_outlined,
-                                  color: kNavy,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  gender,
-                                  style: const TextStyle(
-                                    color: kNavy,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) =>
-                            setState(() => _selectedGender = value),
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 14),
 
