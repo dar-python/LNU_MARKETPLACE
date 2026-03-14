@@ -61,12 +61,12 @@ return new class extends Migration
         $this->dropCheckIfExists('student_id_prefixes', 'chk_student_id_prefixes_format');
         $this->dropForeignIfExists('users', 'users_student_id_prefix_foreign');
 
-        DB::statement("UPDATE student_id_prefixes SET prefix = CONCAT(prefix, '0') WHERE CHAR_LENGTH(prefix) = 2");
-        DB::statement('UPDATE users SET student_id_prefix = LEFT(student_id, 3)');
-
         DB::statement('ALTER TABLE student_id_prefixes MODIFY prefix CHAR(3) NOT NULL');
         DB::statement('ALTER TABLE users MODIFY student_id CHAR(7) NOT NULL');
         DB::statement('ALTER TABLE users MODIFY student_id_prefix CHAR(3) NOT NULL');
+
+        DB::statement("UPDATE student_id_prefixes SET prefix = CONCAT(prefix, '0') WHERE CHAR_LENGTH(prefix) = 2");
+        DB::statement('UPDATE users SET student_id_prefix = LEFT(student_id, 3)');
 
         $hasUnexpectedPrefixesAfterNormalization = DB::table('student_id_prefixes')
             ->whereRaw("prefix NOT REGEXP '^({$allowedAlternation})$'")

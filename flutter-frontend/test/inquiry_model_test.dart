@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_lnu_marketplace/Inquiry_model.dart';
+import 'package:flutter_lnu_marketplace/inquiry_model.dart';
 import 'package:flutter_lnu_marketplace/listing_model_page.dart';
 
 void main() {

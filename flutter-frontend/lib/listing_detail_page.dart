@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'Inquiry_service.dart';
+import 'inquiry_service.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
 import 'favorite_service.dart';
@@ -629,8 +629,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   Color _conditionBackgroundColor(String condition) {
     switch (condition) {
+      case 'New':
       case 'Brand New':
         return Colors.green.shade100;
+      case 'Used':
       case 'Pre-owned':
         return Colors.blue.shade100;
       default:
@@ -640,8 +642,10 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   Color _conditionTextColor(String condition) {
     switch (condition) {
+      case 'New':
       case 'Brand New':
         return Colors.green.shade700;
+      case 'Used':
       case 'Pre-owned':
         return Colors.blue.shade700;
       default:

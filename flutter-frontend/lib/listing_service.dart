@@ -90,15 +90,25 @@ class ListingService {
     required String title,
     required String price,
     required String category,
-    required String condition,
+    String? condition,
     required String description,
     List<File> imageFiles = const <File>[],
     String? campusLocation,
+    String? meetupArrangement,
+    String? serviceType,
+    String? serviceMode,
     ListingCreateProgressCallback? onProgress,
   }) async {
     final normalizedTitle = title.trim();
     final normalizedDescription = description.trim();
+    final normalizedCondition = condition?.trim();
     final normalizedCampusLocation = (campusLocation ?? '').trim();
+    final normalizedMeetupArrangement = (meetupArrangement ?? '').trim();
+    final normalizedServiceType = (serviceType ?? '').trim();
+    final normalizedServiceMode = (serviceMode ?? '').trim().toLowerCase();
+    final normalizedDisplayLocation = normalizedMeetupArrangement.isNotEmpty
+        ? normalizedMeetupArrangement
+        : normalizedCampusLocation;
     final parsedPrice = _normalizePriceForApi(price);
     if (normalizedTitle.isEmpty) {
       throw const FormatException('Please enter a title.');
@@ -117,9 +127,11 @@ class ListingService {
       title: normalizedTitle,
       price: 'P${parsedPrice.toStringAsFixed(2)}',
       categoryName: backendCategory.name,
-      condition: normalizeListingConditionLabel(condition),
+      condition: normalizedCondition != null && normalizedCondition.isNotEmpty
+          ? normalizeListingConditionLabel(normalizedCondition)
+          : '',
       description: normalizedDescription,
-      campusLocation: normalizedCampusLocation,
+      campusLocation: normalizedDisplayLocation,
       imageFile: imageFiles.isNotEmpty ? imageFiles.first : null,
     );
 
@@ -131,9 +143,16 @@ class ListingService {
         'title': normalizedTitle,
         'description': normalizedDescription,
         'price': parsedPrice.toStringAsFixed(2),
-        'item_condition': backendItemConditionForLabel(condition),
         'quantity': 1,
         'is_negotiable': false,
+        if (normalizedCondition != null && normalizedCondition.isNotEmpty)
+          'item_condition': backendItemConditionForLabel(normalizedCondition),
+        if (normalizedMeetupArrangement.isNotEmpty)
+          'meetup_arrangement': normalizedMeetupArrangement,
+        if (normalizedServiceType.isNotEmpty)
+          'service_type': normalizedServiceType,
+        if (normalizedServiceMode.isNotEmpty)
+          'service_mode': normalizedServiceMode,
         if (normalizedCampusLocation.isNotEmpty)
           'campus_location': normalizedCampusLocation,
       },
@@ -153,7 +172,9 @@ class ListingService {
       imageFile: fallbackListing.imageFile,
       seller: fallbackListing.seller,
       sellerAvatar: fallbackListing.sellerAvatar,
-      condition: normalizeListingConditionLabel(createdListing.condition),
+      condition: normalizedCondition != null && normalizedCondition.isNotEmpty
+          ? normalizeListingConditionLabel(normalizedCondition)
+          : '',
       category: backendCategory.name,
     );
 

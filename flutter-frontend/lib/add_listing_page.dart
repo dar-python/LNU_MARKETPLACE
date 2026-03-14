@@ -24,39 +24,56 @@ class _AddListingPageState extends State<AddListingPage> {
   final _titleController = TextEditingController();
   final _priceController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _serviceTypeController = TextEditingController();
+  final _meetupArrangementController = TextEditingController();
   final ApiClient _apiClient = ApiClient();
   final ImagePicker _picker = ImagePicker();
 
   String? _selectedCategory;
   String? _selectedCondition;
+  String? _selectedServiceMode;
   List<File> _selectedImages = <File>[];
   bool _isLoading = false;
   String? _errorMessage;
   String? _submissionStatusMessage;
 
-  final List<String> _categories = <String>[
-    'Gadgets',
-    'Lab Tools',
-    'Sports Equipment',
-    'School Supplies',
-    'Clothing',
-    'Electronics',
+  final List<String> _goodsCategories = <String>[
     'Books',
     'Uniforms',
-    'Food',
-    'Drinks',
-    'Accessories',
+    'School Supplies',
+    'Lab Tools',
+    'Electronics',
     'Others',
   ];
 
-  final List<String> _conditions = <String>['Brand New', 'Pre-owned'];
+  final List<String> _serviceCategories = <String>[
+    'Tutoring',
+    'Editing',
+    'Design',
+    'Commission',
+    'Repair',
+  ];
+
+  final List<String> _conditions = <String>['New', 'Used'];
+  final List<String> _serviceModes = <String>['Onsite', 'Remote', 'Meetup'];
+
+  List<String> get _categories => <String>[
+    ..._goodsCategories,
+    ..._serviceCategories,
+  ];
 
   @override
   void dispose() {
     _titleController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
+    _serviceTypeController.dispose();
+    _meetupArrangementController.dispose();
     super.dispose();
+  }
+
+  bool _isServiceCategory(String? category) {
+    return category != null && _serviceCategories.contains(category);
   }
 
   Future<void> _pickImages() async {
@@ -83,6 +100,8 @@ class _AddListingPageState extends State<AddListingPage> {
   }
 
   Future<void> _submitListing() async {
+    final isServiceCategory = _isServiceCategory(_selectedCategory);
+
     if (!AuthService().hasSession) {
       setState(() => _errorMessage = 'Please log in to post a listing.');
       return;
@@ -103,8 +122,12 @@ class _AddListingPageState extends State<AddListingPage> {
       setState(() => _errorMessage = 'Please select a category');
       return;
     }
-    if (_selectedCondition == null) {
+    if (!isServiceCategory && _selectedCondition == null) {
       setState(() => _errorMessage = 'Please select a condition');
+      return;
+    }
+    if (isServiceCategory && _serviceTypeController.text.trim().isEmpty) {
+      setState(() => _errorMessage = 'Please enter a service type');
       return;
     }
     if (_descriptionController.text.trim().isEmpty) {
@@ -123,8 +146,13 @@ class _AddListingPageState extends State<AddListingPage> {
         title: _titleController.text.trim(),
         price: _priceController.text.trim(),
         category: _selectedCategory!,
-        condition: _selectedCondition!,
+        condition: isServiceCategory ? null : _selectedCondition,
         description: _descriptionController.text.trim(),
+        meetupArrangement: _meetupArrangementController.text.trim(),
+        serviceType: isServiceCategory
+            ? _serviceTypeController.text.trim()
+            : null,
+        serviceMode: isServiceCategory ? _selectedServiceMode : null,
         imageFiles: _selectedImages,
         onProgress: (message) {
           if (!mounted) {
@@ -267,6 +295,7 @@ class _AddListingPageState extends State<AddListingPage> {
     final previewImage = _selectedImages.isNotEmpty
         ? _selectedImages.first
         : null;
+    final isServiceCategory = _isServiceCategory(_selectedCategory);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
@@ -517,71 +546,113 @@ class _AddListingPageState extends State<AddListingPage> {
                       icon: Icons.category_outlined,
                       items: _categories,
                       onChanged: (value) {
-                        setState(() => _selectedCategory = value);
+                        setState(() {
+                          _selectedCategory = value;
+                          if (_isServiceCategory(value)) {
+                            _selectedCondition = null;
+                          } else {
+                            _serviceTypeController.clear();
+                            _selectedServiceMode = null;
+                          }
+                        });
                       },
                     ),
                     const SizedBox(height: 16),
-                    _buildLabel('Condition'),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: _conditions.map((condition) {
-                        final isSelected = _selectedCondition == condition;
-                        return Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() => _selectedCondition = condition);
-                            },
-                            child: Container(
-                              margin: EdgeInsets.only(
-                                right: condition != _conditions.last ? 8 : 0,
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: isSelected ? kNavy : kWhite,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? kNavy
-                                      : Colors.grey.shade300,
+                    if (isServiceCategory) ...<Widget>[
+                      _buildLabel('Service Type'),
+                      const SizedBox(height: 8),
+                      _buildTextField(
+                        controller: _serviceTypeController,
+                        hint: 'e.g., Math Tutoring, Essay Editing',
+                        icon: Icons.design_services_outlined,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildLabel('Service Mode'),
+                      const SizedBox(height: 8),
+                      _buildDropdown(
+                        value: _selectedServiceMode,
+                        hint: 'Select a service mode',
+                        icon: Icons.room_service_outlined,
+                        items: _serviceModes,
+                        onChanged: (value) {
+                          setState(() => _selectedServiceMode = value);
+                        },
+                      ),
+                    ] else ...<Widget>[
+                      _buildLabel('Condition'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: _conditions.map((condition) {
+                          final isSelected = _selectedCondition == condition;
+                          return Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() => _selectedCondition = condition);
+                              },
+                              child: Container(
+                                margin: EdgeInsets.only(
+                                  right: condition != _conditions.last ? 8 : 0,
                                 ),
-                                boxShadow: <BoxShadow>[
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.04),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: <Widget>[
-                                  Icon(
-                                    condition == 'Brand New'
-                                        ? Icons.fiber_new_rounded
-                                        : Icons.recycling_rounded,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? kNavy : kWhite,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
                                     color: isSelected
-                                        ? kGold
-                                        : Colors.grey[400],
-                                    size: 20,
+                                        ? kNavy
+                                        : Colors.grey.shade300,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    condition,
-                                    style: TextStyle(
-                                      color: isSelected
-                                          ? kWhite
-                                          : Colors.grey[600],
-                                      fontSize: 12,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
+                                  boxShadow: <BoxShadow>[
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.04,
+                                      ),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
+                                child: Column(
+                                  children: <Widget>[
+                                    Icon(
+                                      condition == 'New'
+                                          ? Icons.fiber_new_rounded
+                                          : Icons.recycling_rounded,
+                                      color: isSelected
+                                          ? kGold
+                                          : Colors.grey[400],
+                                      size: 20,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      condition,
+                                      style: TextStyle(
+                                        color: isSelected
+                                            ? kWhite
+                                            : Colors.grey[600],
+                                        fontSize: 12,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    _buildLabel('Meetup Arrangement'),
+                    const SizedBox(height: 8),
+                    _buildTextField(
+                      controller: _meetupArrangementController,
+                      hint: 'e.g., LNU Library, Gate 1',
+                      icon: Icons.location_on_outlined,
                     ),
                     const SizedBox(height: 16),
                     _buildLabel('Description'),

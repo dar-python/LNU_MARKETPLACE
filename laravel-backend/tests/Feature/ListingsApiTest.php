@@ -115,6 +115,38 @@ class ListingsApiTest extends TestCase
         ]);
     }
 
+    public function test_authenticated_user_can_create_service_listing_with_seeded_service_slug(): void
+    {
+        $owner = $this->createUser('2307012');
+        $token = $owner->createToken('test-token')->plainTextToken;
+        $payload = $this->validListingPayload();
+        unset($payload['category_id'], $payload['item_condition'], $payload['campus_location']);
+        $payload['category_slug'] = 'tutoring';
+        $payload['service_type'] = 'Math Tutoring';
+        $payload['service_mode'] = 'remote';
+        $payload['meetup_arrangement'] = 'LNU Library';
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/listings', $payload);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.listing.user_id', $owner->id)
+            ->assertJsonPath('data.listing.category.slug', 'tutoring')
+            ->assertJsonPath('data.listing.service_type', 'Math Tutoring')
+            ->assertJsonPath('data.listing.service_mode', 'remote')
+            ->assertJsonPath('data.listing.meetup_arrangement', 'LNU Library');
+
+        $this->assertDatabaseHas('listings', [
+            'user_id' => $owner->id,
+            'title' => $payload['title'],
+            'service_type' => 'Math Tutoring',
+            'service_mode' => 'remote',
+            'meetup_arrangement' => 'LNU Library',
+        ]);
+    }
+
     public function test_create_listing_validation_errors_for_missing_required_fields(): void
     {
         $owner = $this->createUser('2307006');
@@ -306,7 +338,7 @@ class ListingsApiTest extends TestCase
             'title' => 'Calculus book',
             'description' => 'Preowned but usable condition.',
             'price' => '150.00',
-            'item_condition' => 'preowned',
+            'item_condition' => 'used',
             'quantity' => 1,
             'is_negotiable' => false,
             'campus_location' => 'LNU Main Campus',
@@ -331,7 +363,7 @@ class ListingsApiTest extends TestCase
             'title' => 'Original title',
             'description' => 'Original description',
             'price' => '120.00',
-            'item_condition' => 'preowned',
+            'item_condition' => 'used',
             'quantity' => 1,
             'is_negotiable' => false,
             'campus_location' => 'LNU',

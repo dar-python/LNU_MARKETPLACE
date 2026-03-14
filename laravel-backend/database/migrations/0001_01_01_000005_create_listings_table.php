@@ -19,10 +19,12 @@ return new class extends Migration
             $table->string('title', 150);
             $table->text('description');
             $table->decimal('price', 10, 2);
-            $table->enum('item_condition', ['new', 'like_new', 'good', 'fair', 'poor']);
+            $table->enum('item_condition', ['new', 'used'])->nullable();
+            $table->string('service_type')->nullable();
+            $table->enum('service_mode', ['onsite', 'remote', 'meetup'])->nullable();
             $table->unsignedSmallInteger('quantity')->default(1);
             $table->boolean('is_negotiable')->default(false);
-            $table->string('campus_location', 120)->nullable();
+            $table->string('meetup_arrangement', 120)->nullable();
             $table->enum('listing_status', ['pending_review', 'available', 'reserved', 'sold', 'rejected', 'suspended', 'archived'])
                 ->default('pending_review');
             $table->boolean('is_flagged')->default(false);

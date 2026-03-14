@@ -150,13 +150,7 @@ class ApiClient {
         case DioExceptionType.receiveTimeout:
           mappedMessage = 'Request timed out. Please try again.';
         case DioExceptionType.connectionError:
-          if (error.error is SocketException) {
-            mappedMessage =
-                'Cannot reach the server at ${AppConfig.baseUrl}. Check API_BASE_URL and network access.';
-          } else {
-            mappedMessage =
-                'Connection failed for ${AppConfig.baseUrl}. Check API_BASE_URL and network access.';
-          }
+          mappedMessage = _mapTransportError(error);
         case DioExceptionType.badCertificate:
           mappedMessage = 'TLS certificate validation failed.';
         case DioExceptionType.cancel:
@@ -168,19 +162,7 @@ class ApiClient {
             includeFieldNames: includeFieldNames,
           );
         case DioExceptionType.unknown:
-          if (error.error is SocketException) {
-            mappedMessage = 'Network error. Please check your connection.';
-          } else {
-            final rawMessage = error.message?.trim();
-            if (rawMessage == null ||
-                rawMessage.isEmpty ||
-                rawMessage.toLowerCase() == 'xmlhttprequest error') {
-              mappedMessage =
-                  'Unexpected network error while contacting ${AppConfig.baseUrl}. Check API_BASE_URL and backend availability.';
-            } else {
-              mappedMessage = rawMessage;
-            }
-          }
+          mappedMessage = _mapTransportError(error);
       }
 
       _logMappedError(
@@ -193,6 +175,53 @@ class ApiClient {
     }
 
     return 'Unexpected error.';
+  }
+
+  String _mapTransportError(DioException error) {
+    final details = _transportErrorDetails(error);
+    final normalizedDetails = details.toLowerCase();
+
+    if (normalizedDetails.contains('cleartext')) {
+      return 'HTTP is blocked by Android for ${AppConfig.baseUrl}. Allow cleartext traffic or use HTTPS.';
+    }
+
+    if (normalizedDetails.contains('internet permission')) {
+      return 'This Android build cannot access the internet. Check the manifest INTERNET permission.';
+    }
+
+    if (normalizedDetails.contains('failed host lookup') ||
+        normalizedDetails.contains('name or service not known')) {
+      return 'Host lookup failed for ${AppConfig.baseUrl}. Check the API_BASE_URL host or IP address.';
+    }
+
+    if (normalizedDetails.contains('connection refused')) {
+      return 'The server refused the connection at ${AppConfig.baseUrl}. Check that the backend is running and listening on that port.';
+    }
+
+    if (normalizedDetails.contains(
+      'connection closed before full header was received',
+    )) {
+      return 'The server at ${AppConfig.baseUrl} closed the connection before sending a valid HTTP response. This usually means API_BASE_URL points to the wrong host or port, such as the phone itself instead of the backend.';
+    }
+
+    if (normalizedDetails.contains('network is unreachable') ||
+        normalizedDetails.contains('no route to host')) {
+      return 'The device cannot reach ${AppConfig.baseUrl}. Check that the phone and backend are on the same network.';
+    }
+
+    if (normalizedDetails.contains('timed out')) {
+      return 'Timed out while contacting ${AppConfig.baseUrl}. Check backend availability and firewall access.';
+    }
+
+    if (error.error is SocketException) {
+      return 'Cannot reach the server at ${AppConfig.baseUrl}. Check API_BASE_URL, the backend port, and device-to-host network access.';
+    }
+
+    if (details.isNotEmpty) {
+      return 'Network error while contacting ${AppConfig.baseUrl}: $details';
+    }
+
+    return 'Unexpected network error while contacting ${AppConfig.baseUrl}. Check API_BASE_URL and backend availability.';
   }
 
   bool isUnauthorizedError(Object error) {
@@ -389,6 +418,31 @@ class ApiClient {
     }
 
     return '${serializedBody.substring(0, AppConfig.networkDebugBodySnippetLimit)}...';
+  }
+
+  String _transportErrorDetails(DioException error) {
+    final rawDetails = <String>[
+      error.message?.trim() ?? '',
+      error.error?.toString().trim() ?? '',
+    ];
+
+    final uniqueDetails = <String>[];
+    final seenNormalized = <String>{};
+    for (final detail in rawDetails) {
+      if (detail.isEmpty) {
+        continue;
+      }
+
+      final normalizedDetail = detail.toLowerCase();
+      if (normalizedDetail == 'xmlhttprequest error' ||
+          !seenNormalized.add(normalizedDetail)) {
+        continue;
+      }
+
+      uniqueDetails.add(detail);
+    }
+
+    return uniqueDetails.join(' ');
   }
 
   String _serializeBody(dynamic body) {

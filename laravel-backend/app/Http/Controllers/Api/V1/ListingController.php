@@ -24,25 +24,7 @@ class ListingController extends Controller
      */
     private const ITEM_CONDITIONS = [
         'new',
-        'like_new',
-        'good',
-        'fair',
-        'poor',
-        'brandnew',
-        'preowned',
-    ];
-
-    /**
-     * @var array<string, string>
-     */
-    private const ITEM_CONDITION_NORMALIZATION_MAP = [
-        'new' => 'brandnew',
-        'like_new' => 'preowned',
-        'good' => 'preowned',
-        'fair' => 'preowned',
-        'poor' => 'preowned',
-        'brandnew' => 'brandnew',
-        'preowned' => 'preowned',
+        'used',
     ];
 
     /**
@@ -135,7 +117,10 @@ class ListingController extends Controller
             ->paginate($perPage);
 
         return ApiResponse::success('Listings retrieved successfully.', [
-            'listings' => $paginator->items(),
+            'listings' => array_map(
+                fn (Listing $listing): array => $this->serializeListingDetail($listing),
+                $paginator->items()
+            ),
             'meta' => [
                 'current_page' => $paginator->currentPage(),
                 'per_page' => $paginator->perPage(),
@@ -199,10 +184,12 @@ class ListingController extends Controller
             'title' => (string) $validated['title'],
             'description' => (string) $validated['description'],
             'price' => $validated['price'],
-            'item_condition' => $this->normalizeItemCondition((string) $validated['item_condition']),
+            'item_condition' => $validated['item_condition'] ?? null,
             'quantity' => (int) ($validated['quantity'] ?? 1),
             'is_negotiable' => (bool) ($validated['is_negotiable'] ?? false),
-            'campus_location' => $validated['campus_location'] ?? null,
+            'meetup_arrangement' => $validated['meetup_arrangement'] ?? null,
+            'service_type' => $validated['service_type'] ?? null,
+            'service_mode' => $validated['service_mode'] ?? null,
             'listing_status' => $this->resolveListingStatus($validated),
         ]);
 
@@ -226,10 +213,12 @@ class ListingController extends Controller
             'title' => (string) $validated['title'],
             'description' => (string) $validated['description'],
             'price' => $validated['price'],
-            'item_condition' => $this->normalizeItemCondition((string) $validated['item_condition']),
+            'item_condition' => $validated['item_condition'] ?? null,
             'quantity' => (int) ($validated['quantity'] ?? 1),
             'is_negotiable' => (bool) ($validated['is_negotiable'] ?? false),
-            'campus_location' => $validated['campus_location'] ?? null,
+            'meetup_arrangement' => $validated['meetup_arrangement'] ?? null,
+            'service_type' => $validated['service_type'] ?? null,
+            'service_mode' => $validated['service_mode'] ?? null,
             'listing_status' => $this->resolveListingStatus($validated),
         ]);
         $listing->save();
@@ -271,10 +260,12 @@ class ListingController extends Controller
             'title' => ['required', 'string', 'max:150'],
             'description' => ['required', 'string'],
             'price' => ['required', 'numeric', 'min:0'],
-            'item_condition' => ['required', 'string', Rule::in(self::ITEM_CONDITIONS)],
+            'item_condition' => ['nullable', 'string', Rule::in(self::ITEM_CONDITIONS)],
             'quantity' => ['nullable', 'integer', 'min:1'],
             'is_negotiable' => ['nullable', 'boolean'],
-            'campus_location' => ['nullable', 'string', 'max:120'],
+            'meetup_arrangement' => ['nullable', 'string', 'max:120'],
+            'service_type' => ['nullable', 'string', 'max:100'],
+            'service_mode' => ['nullable', 'string', Rule::in(['onsite', 'remote', 'meetup'])],
             'listing_status' => ['nullable', 'string', Rule::in(self::LISTING_STATUSES)],
             'status' => ['nullable', 'string', Rule::in(self::LISTING_STATUSES)],
         ];
@@ -301,14 +292,6 @@ class ListingController extends Controller
         return is_int($userId) && $userId === (int) $listing->user_id;
     }
 
-    private function normalizeItemCondition(string $itemCondition): string
-    {
-        return self::ITEM_CONDITION_NORMALIZATION_MAP[$itemCondition] ?? 'preowned';
-    }
-
-    /**
-     * @param array<string, mixed> $validated
-     */
     private function resolveCategoryId(array $validated): int
     {
         if (isset($validated['category_id'])) {
@@ -340,18 +323,13 @@ class ListingController extends Controller
      */
     private function searchableLocationColumns(): array
     {
-        $columns = ['campus_location'];
-
-        if (Schema::hasColumn('listings', 'meetup_location')) {
-            $columns[] = 'meetup_location';
-        }
-
-        return $columns;
+        return ['meetup_arrangement'];
     }
 
     private function visibleListingsQuery(): Builder
     {
         $query = Listing::query()
+            ->with(['category:id,name,slug', 'listingImages'])
             ->whereIn('listing_status', self::BROWSE_VISIBLE_STATUSES)
             ->where('is_flagged', false);
 
@@ -373,6 +351,7 @@ class ListingController extends Controller
         return Listing::query()
             ->with([
                 'category:id,name,slug',
+                'listingImages',
                 'approvedByUser:id,first_name,middle_name,last_name',
             ])
             ->where('user_id', $userId);
@@ -392,7 +371,9 @@ class ListingController extends Controller
             'price' => $listing->price,
             'item_condition' => (string) $listing->item_condition,
             'listing_status' => (string) $listing->listing_status,
-            'campus_location' => $listing->campus_location,
+            'meetup_arrangement' => $listing->meetup_arrangement,
+            'service_type' => $listing->service_type,
+            'service_mode' => $listing->service_mode,
             'category' => $listing->category ? [
                 'id' => $listing->category->id,
                 'name' => $listing->category->name,
@@ -437,12 +418,23 @@ class ListingController extends Controller
             'moderation_label' => $this->listingModerationLabel($moderationStatus),
             'admin_note' => $moderationStatus === 'declined' && $adminNote !== '' ? $adminNote : null,
             'moderation_note' => $adminNote !== '' ? $adminNote : null,
-            'campus_location' => $listing->campus_location,
+            'meetup_arrangement' => $listing->meetup_arrangement,
+            'service_type' => $listing->service_type,
+            'service_mode' => $listing->service_mode,
             'category' => $listing->category ? [
                 'id' => $listing->category->id,
                 'name' => $listing->category->name,
                 'slug' => $listing->category->slug,
             ] : null,
+            'images' => array_map(
+                static fn (ListingImage $image): array => [
+                    'id' => $image->id,
+                    'image_path' => $image->image_path,
+                    'sort_order' => (int) $image->sort_order,
+                    'is_primary' => (bool) $image->is_primary,
+                ],
+                $listing->listingImages->all()
+            ),
             'approved_by_user_id' => $listing->approved_by_user_id === null ? null : (int) $listing->approved_by_user_id,
             'reviewed_at' => $listing->approved_at?->toISOString(),
             'approved_at' => $listing->approved_at?->toISOString(),

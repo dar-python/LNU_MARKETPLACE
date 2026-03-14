@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'Inquiry_model.dart';
-import 'Inquiry_service.dart';
+import 'inquiry_model.dart';
+import 'inquiry_service.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
 import 'inquiry_detail_page.dart';
@@ -278,7 +278,7 @@ class _InquiryPageState extends State<InquiryPage>
     await Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => route.isFirst,
+      (_) => false,
     );
     _isRedirectingToLogin = false;
   }
