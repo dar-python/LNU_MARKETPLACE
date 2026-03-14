@@ -20,10 +20,12 @@ use App\Support\ApiResponse;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
@@ -247,6 +249,68 @@ class AuthController extends Controller
 
         return ApiResponse::success('Authenticated user.', [
             'user' => $this->serializeUser($user, true),
+        ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'contact_number' => ['nullable', 'string', 'max:30'],
+            'program' => ['nullable', 'string', 'max:100'],
+            'year_level' => ['nullable', 'string', 'max:50'],
+            'organization' => ['nullable', 'string', 'max:100'],
+            'section' => ['nullable', 'string', 'max:50'],
+            'bio' => ['nullable', 'string', 'max:1000'],
+            'profile_picture' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
+        $user = $request->user()->loadMissing('roles');
+        $profilePicture = $request->file('profile_picture');
+        $storedPath = null;
+        $previousPath = $this->currentProfilePicturePath($user);
+
+        try {
+            if ($profilePicture instanceof UploadedFile) {
+                $storedPath = $profilePicture->store('profile-pictures/'.$user->id, 'public');
+            }
+
+            DB::transaction(function () use ($user, $validated, $storedPath): void {
+                $updates = [];
+
+                foreach (['contact_number', 'program', 'year_level', 'organization', 'section', 'bio'] as $field) {
+                    if (array_key_exists($field, $validated)) {
+                        $updates[$field] = $this->nullableString($validated[$field]);
+                    }
+                }
+
+                if (is_string($storedPath) && $storedPath !== '') {
+                    $updates['profile_picture_path'] = $storedPath;
+                }
+
+                if ($updates !== []) {
+                    $user->forceFill($updates)->save();
+                }
+            });
+        } catch (\Throwable $throwable) {
+            if (is_string($storedPath) && $storedPath !== '') {
+                Storage::disk('public')->delete($storedPath);
+            }
+
+            throw $throwable;
+        }
+
+        if (
+            is_string($storedPath)
+            && $storedPath !== ''
+            && is_string($previousPath)
+            && $previousPath !== ''
+            && $previousPath !== $storedPath
+        ) {
+            Storage::disk('public')->delete($previousPath);
+        }
+
+        return ApiResponse::success('Profile updated successfully.', [
+            'user' => $this->serializeUser($user->refresh()->loadMissing('roles'), true),
         ]);
     }
 
@@ -835,6 +899,13 @@ class AuthController extends Controller
             'student_id' => $user->student_id,
             'email' => $user->email,
             'status' => $user->apiStatus(),
+            'contact_number' => $user->contact_number,
+            'program' => $user->program,
+            'year_level' => $user->year_level,
+            'organization' => $user->organization,
+            'section' => $user->section,
+            'bio' => $user->bio,
+            'profile_picture_path' => $this->currentProfilePicturePath($user),
         ];
 
         if ($withRoles) {
@@ -846,5 +917,31 @@ class AuthController extends Controller
         }
 
         return $payload;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function currentProfilePicturePath(User $user): ?string
+    {
+        $profilePicturePath = $user->profile_picture_path;
+
+        if (is_string($profilePicturePath) && $profilePicturePath !== '') {
+            return $profilePicturePath;
+        }
+
+        $legacyProfilePhotoPath = $user->profile_photo_path;
+
+        return is_string($legacyProfilePhotoPath) && $legacyProfilePhotoPath !== ''
+            ? $legacyProfilePhotoPath
+            : null;
     }
 }

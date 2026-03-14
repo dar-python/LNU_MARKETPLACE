@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'about_page.dart';
+import 'app_palette.dart';
 import 'auth_service.dart';
-import 'backend_status_page.dart';
-import 'login_page.dart';
-import 'home_page.dart';
-import 'favorite_page.dart';
-import 'my_listings_page.dart';
-
-const kNavy = Color(0xFF000080);
-const kDarkNavy = Color(0xFF00263E);
-const kGold = Color(0xFFFFD700);
-const kWhite = Color(0xFFFFFFFF);
+import 'backend_status_page.dart' show BackendStatusPage;
+import 'edit_profile_page.dart';
+import 'favorite_page.dart' show FavoritesPage;
+import 'help_support_page.dart';
+import 'home_page.dart' show HomePage;
+import 'login_page.dart' show LoginPage;
+import 'my_listings_page.dart' show MyListingsPage;
+import 'privacy_policy_page.dart';
+import 'purchase_history_page.dart';
+import 'settings_page.dart';
+import 'terms_of_service_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -102,6 +105,10 @@ class _ProfilePageState extends State<ProfilePage> {
     _isRedirectingToLogin = false;
   }
 
+  Future<void> _openPage(Widget page) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _user;
@@ -115,7 +122,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final pingError = AuthService().lastPingError;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FF),
+      backgroundColor: kPageBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -384,7 +391,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     _MenuItem(
                       icon: Icons.person_outline,
                       label: 'Edit Profile',
-                      onTap: () {},
+                      onTap: () => _openPage(const EditProfilePage()),
                     ),
                     _MenuItem(
                       icon: Icons.store_outlined,
@@ -413,7 +420,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     _MenuItem(
                       icon: Icons.history,
                       label: 'Purchase History',
-                      onTap: () {},
+                      onTap: () => _openPage(const PurchaseHistoryPage()),
                     ),
                     _MenuItem(
                       icon: Icons.bug_report_outlined,
@@ -429,7 +436,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 20),
                     const Text(
-                      'Settings',
+                      'Preferences',
                       style: TextStyle(
                         color: kNavy,
                         fontWeight: FontWeight.w800,
@@ -438,6 +445,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 12),
                     _MenuItem(
+                      icon: Icons.settings_outlined,
+                      label: 'Settings',
+                      onTap: () => _openPage(const SettingsPage()),
+                    ),
+                    _MenuItem(
                       icon: Icons.notifications_outlined,
                       label: 'Notifications',
                       onTap: () {},
@@ -445,37 +457,33 @@ class _ProfilePageState extends State<ProfilePage> {
                     _MenuItem(
                       icon: Icons.help_outline,
                       label: 'Help & Support',
-                      onTap: () {},
+                      onTap: () => _openPage(const HelpSupportPage()),
                     ),
                     _MenuItem(
                       icon: Icons.info_outline,
                       label: 'About',
-                      onTap: () {},
+                      onTap: () => _openPage(const AboutPage()),
+                    ),
+                    _MenuItem(
+                      icon: Icons.privacy_tip_outlined,
+                      label: 'Privacy Policy',
+                      onTap: () => _openPage(const PrivacyPolicyPage()),
+                    ),
+                    _MenuItem(
+                      icon: Icons.description_outlined,
+                      label: 'Terms of Service',
+                      onTap: () => _openPage(const TermsOfServicePage()),
                     ),
                     const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _logout,
-                        icon: const Icon(Icons.logout, size: 18),
-                        label: const Text(
-                          'Logout',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[50],
-                          foregroundColor: Colors.red[600],
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            side: BorderSide(color: Colors.red[200]!),
-                          ),
-                        ),
-                      ),
+                    _MenuItem(
+                      icon: Icons.logout,
+                      label: 'Sign Out',
+                      onTap: _logout,
+                      iconColor: Colors.red,
+                      textColor: Colors.red,
+                      trailingColor: Colors.redAccent,
+                      backgroundColor: Colors.red.shade50,
+                      borderColor: Colors.red.shade100,
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -537,47 +545,66 @@ class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final Color? iconColor;
+  final Color? textColor;
+  final Color? trailingColor;
 
   const _MenuItem({
     required this.icon,
     required this.label,
     required this.onTap,
+    this.backgroundColor,
+    this.borderColor,
+    this.iconColor,
+    this.textColor,
+    this.trailingColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: kWhite,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+    final resolvedBackgroundColor = backgroundColor ?? kWhite;
+    final resolvedBorderColor = borderColor ?? Colors.transparent;
+    final resolvedIconColor = iconColor ?? kNavy;
+    final resolvedTextColor = textColor ?? kNavy;
+    final resolvedTrailingColor = trailingColor ?? Colors.grey.shade400;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: resolvedBackgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: resolvedBorderColor),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          onTap: onTap,
+          leading: Icon(icon, color: resolvedIconColor, size: 20),
+          title: Text(
+            label,
+            style: TextStyle(
+              color: resolvedTextColor,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
-          ],
-        ),
-        child: Row(
-          children: <Widget>[
-            Icon(icon, color: kNavy, size: 20),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: kNavy,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey[400], size: 18),
-          ],
+          ),
+          trailing: Icon(
+            Icons.chevron_right,
+            color: resolvedTrailingColor,
+            size: 18,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );
