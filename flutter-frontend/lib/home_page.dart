@@ -39,26 +39,15 @@ class _HomePageState extends State<HomePage> {
   List<Listing> _homeListings = <Listing>[];
   List<Listing> _myListings = <Listing>[];
 
-  final List<Map<String, dynamic>> _categories = <Map<String, dynamic>>[
-    <String, dynamic>{'icon': Icons.menu_book_rounded, 'label': 'Books'},
-    <String, dynamic>{'icon': Icons.checkroom_rounded, 'label': 'Uniforms'},
-    <String, dynamic>{'icon': Icons.laptop_rounded, 'label': 'Gadgets'},
-    <String, dynamic>{'icon': Icons.science_rounded, 'label': 'Lab Tools'},
-    <String, dynamic>{'icon': Icons.food_bank_rounded, 'label': 'Food'},
-    <String, dynamic>{'icon': Icons.local_drink_rounded, 'label': 'Drinks'},
-    <String, dynamic>{
-      'icon': Icons.accessibility_rounded,
-      'label': 'Accessories',
-    },
-    <String, dynamic>{
-      'icon': Icons.sports_basketball_rounded,
-      'label': 'Sports',
-    },
-    <String, dynamic>{
-      'icon': Icons.electrical_services_rounded,
-      'label': 'Electronics',
-    },
-    <String, dynamic>{'icon': Icons.inventory_2_rounded, 'label': 'Others'},
+  final List<_HomeCategory> _categories = const <_HomeCategory>[
+    _HomeCategory(icon: Icons.menu_book, label: 'Books'),
+    _HomeCategory(icon: Icons.checkroom, label: 'Uniforms'),
+    _HomeCategory(icon: Icons.devices, label: 'Gadgets'),
+    _HomeCategory(icon: Icons.science, label: 'Lab Tools'),
+    _HomeCategory(icon: Icons.school, label: 'Tutoring'),
+    _HomeCategory(icon: Icons.edit_document, label: 'Editing'),
+    _HomeCategory(icon: Icons.design_services, label: 'Design'),
+    _HomeCategory(icon: Icons.build, label: 'Repair'),
   ];
 
   List<Listing> get _featuredListings => _homeListings.take(4).toList();
@@ -172,10 +161,22 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openBrowsePage() async {
+    setState(() {
+      _selectedIndex = 1;
+    });
+
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const BrowsePage()),
     );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = 0;
+    });
   }
 
   Future<void> _openListing(Listing listing) async {
@@ -472,6 +473,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildHeroBanner() {
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.all(16),
       height: 180,
       decoration: BoxDecoration(
@@ -518,73 +520,136 @@ class _HomePageState extends State<HomePage> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: kGold,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    '#RISEwithLNU',
-                    style: TextStyle(
-                      color: kNavy,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 10,
-                      letterSpacing: 1,
-                    ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kGold,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          '#RISEwithLNU',
+                          style: TextStyle(
+                            color: kNavy,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Buy & Sell Within\nthe LNU Community',
+                        style: TextStyle(
+                          color: kWhite,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _openBrowsePage,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kGold,
+                          foregroundColor: kNavy,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Browse Now',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Buy & Sell Within\nthe LNU Community',
-                  style: TextStyle(
-                    color: kWhite,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 20,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: _openBrowsePage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kGold,
-                    foregroundColor: kNavy,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Browse Now',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-                  ),
-                ),
+                const SizedBox(width: 12),
+                SizedBox(width: 104, child: _buildHeroIllustration()),
               ],
-            ),
-          ),
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: Icon(
-              Icons.store_mall_directory_rounded,
-              color: kGold.withValues(alpha: 0.5),
-              size: 80,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeroIllustration() {
+    return Stack(
+      alignment: Alignment.center,
+      children: <Widget>[
+        Positioned(
+          top: 8,
+          left: 8,
+          right: 8,
+          child: Container(
+            height: 72,
+            decoration: BoxDecoration(
+              color: kWhite.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: kWhite.withValues(alpha: 0.18)),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 20,
+          child: Icon(
+            Icons.desktop_windows_rounded,
+            color: kGold.withValues(alpha: 0.9),
+            size: 56,
+          ),
+        ),
+        Positioned(
+          bottom: 28,
+          left: 24,
+          right: 24,
+          child: Container(
+            height: 8,
+            decoration: BoxDecoration(
+              color: kWhite.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 16,
+          child: Container(
+            width: 44,
+            height: 8,
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 2,
+          right: 6,
+          child: Icon(
+            Icons.mouse_rounded,
+            color: kGold.withValues(alpha: 0.82),
+            size: 18,
+          ),
+        ),
+      ],
     );
   }
 
@@ -603,19 +668,20 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: _categories.map((cat) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: _CategoryChip(
-                    icon: cat['icon'] as IconData,
-                    label: cat['label'] as String,
-                  ),
+          SizedBox(
+            height: 100,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: _categories.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final category = _categories[index];
+                return _CategoryChip(
+                  icon: category.icon,
+                  label: category.label,
                 );
-              }).toList(),
+              },
             ),
           ),
         ],
@@ -890,6 +956,13 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+class _HomeCategory {
+  const _HomeCategory({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+}
+
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({required this.icon, required this.label});
 
@@ -898,34 +971,40 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: kNavy,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: kNavy.withValues(alpha: 0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
+    return SizedBox(
+      width: 96,
+      child: Column(
+        children: <Widget>[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: kNavy,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: kNavy.withValues(alpha: 0.25),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: kGold, size: 24),
           ),
-          child: Icon(icon, color: kGold, size: 22),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: kNavy,
+          const SizedBox(height: 8),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: kNavy,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
