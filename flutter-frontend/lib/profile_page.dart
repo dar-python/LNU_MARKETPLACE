@@ -193,6 +193,38 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  bool _privacySetting(
+    Map<String, dynamic>? user,
+    String camelKey,
+    String snakeKey, {
+    required bool fallback,
+  }) {
+    final value = user?[camelKey] ?? user?[snakeKey];
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is num) {
+      return value != 0;
+    }
+
+    final normalized = value?.toString().trim().toLowerCase();
+    switch (normalized) {
+      case '1':
+      case 'true':
+      case 'yes':
+      case 'on':
+        return true;
+      case '0':
+      case 'false':
+      case 'no':
+      case 'off':
+        return false;
+      default:
+        return fallback;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _user;
@@ -203,9 +235,46 @@ class _ProfilePageState extends State<ProfilePage> {
     final displayStudentId = user?['studentId']?.toString() ?? 'N/A';
     final program = user?['program']?.toString().trim() ?? '';
     final yearLevel = user?['yearLevel']?.toString().trim() ?? '';
+    final organization = user?['organization']?.toString().trim() ?? '';
     final section = user?['section']?.toString().trim() ?? '';
     final contactNumber = user?['contactNumber']?.toString().trim() ?? '';
     final bio = user?['bio']?.toString().trim() ?? '';
+    final isContactPublic = _privacySetting(
+      user,
+      'isContactPublic',
+      'is_contact_public',
+      fallback: false,
+    );
+    final isProgramPublic = _privacySetting(
+      user,
+      'isProgramPublic',
+      'is_program_public',
+      fallback: true,
+    );
+    final isYearLevelPublic = _privacySetting(
+      user,
+      'isYearLevelPublic',
+      'is_year_level_public',
+      fallback: true,
+    );
+    final isOrganizationPublic = _privacySetting(
+      user,
+      'isOrganizationPublic',
+      'is_organization_public',
+      fallback: true,
+    );
+    final isSectionPublic = _privacySetting(
+      user,
+      'isSectionPublic',
+      'is_section_public',
+      fallback: true,
+    );
+    final isBioPublic = _privacySetting(
+      user,
+      'isBioPublic',
+      'is_bio_public',
+      fallback: true,
+    );
     final academicSummary = <String>[
       program,
       yearLevel,
@@ -410,6 +479,86 @@ class _ProfilePageState extends State<ProfilePage> {
                     SizedBox(width: 12),
                     _StatCard(label: 'Saved', value: '0'),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: kWhite,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'Profile Details',
+                        style: TextStyle(
+                          color: kNavy,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Globe means public. Lock means private.',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                      ),
+                      const SizedBox(height: 14),
+                      _ProfileDetailTile(
+                        label: 'Contact Number',
+                        value: contactNumber,
+                        icon: Icons.phone_outlined,
+                        isPublic: isContactPublic,
+                      ),
+                      const SizedBox(height: 10),
+                      _ProfileDetailTile(
+                        label: 'Program',
+                        value: program,
+                        icon: Icons.school_outlined,
+                        isPublic: isProgramPublic,
+                      ),
+                      const SizedBox(height: 10),
+                      _ProfileDetailTile(
+                        label: 'Year Level',
+                        value: yearLevel,
+                        icon: Icons.calendar_today_outlined,
+                        isPublic: isYearLevelPublic,
+                      ),
+                      const SizedBox(height: 10),
+                      _ProfileDetailTile(
+                        label: 'Organization',
+                        value: organization,
+                        icon: Icons.groups_outlined,
+                        isPublic: isOrganizationPublic,
+                      ),
+                      const SizedBox(height: 10),
+                      _ProfileDetailTile(
+                        label: 'Section',
+                        value: section,
+                        icon: Icons.badge_outlined,
+                        isPublic: isSectionPublic,
+                      ),
+                      const SizedBox(height: 10),
+                      _ProfileDetailTile(
+                        label: 'Bio',
+                        value: bio,
+                        icon: Icons.edit_note_outlined,
+                        isPublic: isBioPublic,
+                        isMultiline: true,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -655,6 +804,88 @@ class _StatCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileDetailTile extends StatelessWidget {
+  const _ProfileDetailTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.isPublic,
+    this.isMultiline = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final bool isPublic;
+  final bool isMultiline;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmedValue = value.trim();
+    final displayValue = trimmedValue.isEmpty ? 'Not set' : trimmedValue;
+    final valueColor = trimmedValue.isEmpty ? Colors.grey[500] : kNavy;
+    final privacyColor = isPublic ? const Color(0xFF2E7D32) : Colors.grey[500];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F8FD),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: isMultiline
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
+        children: <Widget>[
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: kGold.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: kNavy, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  displayValue,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                  maxLines: isMultiline ? null : 1,
+                  overflow: isMultiline ? null : TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            isPublic ? Icons.public : Icons.lock_outline_rounded,
+            size: 15,
+            color: privacyColor,
+          ),
+        ],
       ),
     );
   }

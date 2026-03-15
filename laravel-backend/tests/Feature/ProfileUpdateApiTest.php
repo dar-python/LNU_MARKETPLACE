@@ -59,6 +59,12 @@ class ProfileUpdateApiTest extends TestCase
                 'organization' => 'Developers Guild',
                 'section' => 'A',
                 'bio' => 'Building student-first marketplace tools.',
+                'is_contact_public' => false,
+                'is_program_public' => true,
+                'is_year_level_public' => false,
+                'is_organization_public' => true,
+                'is_section_public' => false,
+                'is_bio_public' => true,
                 'profile_picture' => $image,
             ]);
 
@@ -72,6 +78,12 @@ class ProfileUpdateApiTest extends TestCase
             ->assertJsonPath('data.user.organization', 'Developers Guild')
             ->assertJsonPath('data.user.section', 'A')
             ->assertJsonPath('data.user.bio', 'Building student-first marketplace tools.')
+            ->assertJsonPath('data.user.is_contact_public', false)
+            ->assertJsonPath('data.user.is_program_public', true)
+            ->assertJsonPath('data.user.is_year_level_public', false)
+            ->assertJsonPath('data.user.is_organization_public', true)
+            ->assertJsonPath('data.user.is_section_public', false)
+            ->assertJsonPath('data.user.is_bio_public', true)
             ->assertJsonStructure([
                 'data' => [
                     'user' => [
@@ -89,6 +101,12 @@ class ProfileUpdateApiTest extends TestCase
         $this->assertSame('Developers Guild', $user->organization);
         $this->assertSame('A', $user->section);
         $this->assertSame('Building student-first marketplace tools.', $user->bio);
+        $this->assertFalse($user->is_contact_public);
+        $this->assertTrue($user->is_program_public);
+        $this->assertFalse($user->is_year_level_public);
+        $this->assertTrue($user->is_organization_public);
+        $this->assertFalse($user->is_section_public);
+        $this->assertTrue($user->is_bio_public);
         $this->assertNotNull($user->profile_picture_path);
         $this->assertStringStartsWith('profile-pictures/'.$user->id.'/', $user->profile_picture_path);
         Storage::disk('public')->assertExists($user->profile_picture_path);
@@ -103,6 +121,12 @@ class ProfileUpdateApiTest extends TestCase
             ->assertJsonPath('data.user.organization', 'Developers Guild')
             ->assertJsonPath('data.user.section', 'A')
             ->assertJsonPath('data.user.bio', 'Building student-first marketplace tools.')
+            ->assertJsonPath('data.user.is_contact_public', false)
+            ->assertJsonPath('data.user.is_program_public', true)
+            ->assertJsonPath('data.user.is_year_level_public', false)
+            ->assertJsonPath('data.user.is_organization_public', true)
+            ->assertJsonPath('data.user.is_section_public', false)
+            ->assertJsonPath('data.user.is_bio_public', true)
             ->assertJsonPath('data.user.profile_picture_path', $user->profile_picture_path);
     }
 

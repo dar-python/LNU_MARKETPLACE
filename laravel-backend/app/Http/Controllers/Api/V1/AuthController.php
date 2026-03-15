@@ -261,6 +261,12 @@ class AuthController extends Controller
             'organization' => ['nullable', 'string', 'max:100'],
             'section' => ['nullable', 'string', 'max:50'],
             'bio' => ['nullable', 'string', 'max:1000'],
+            'is_contact_public' => ['sometimes', 'boolean'],
+            'is_program_public' => ['sometimes', 'boolean'],
+            'is_year_level_public' => ['sometimes', 'boolean'],
+            'is_organization_public' => ['sometimes', 'boolean'],
+            'is_section_public' => ['sometimes', 'boolean'],
+            'is_bio_public' => ['sometimes', 'boolean'],
             'profile_picture' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
@@ -280,6 +286,19 @@ class AuthController extends Controller
                 foreach (['contact_number', 'program', 'year_level', 'organization', 'section', 'bio'] as $field) {
                     if (array_key_exists($field, $validated)) {
                         $updates[$field] = $this->nullableString($validated[$field]);
+                    }
+                }
+
+                foreach ([
+                    'is_contact_public',
+                    'is_program_public',
+                    'is_year_level_public',
+                    'is_organization_public',
+                    'is_section_public',
+                    'is_bio_public',
+                ] as $field) {
+                    if (array_key_exists($field, $validated)) {
+                        $updates[$field] = (bool) $validated[$field];
                     }
                 }
 
@@ -905,6 +924,12 @@ class AuthController extends Controller
             'organization' => $user->organization,
             'section' => $user->section,
             'bio' => $user->bio,
+            'is_contact_public' => (bool) $user->is_contact_public,
+            'is_program_public' => (bool) $user->is_program_public,
+            'is_year_level_public' => (bool) $user->is_year_level_public,
+            'is_organization_public' => (bool) $user->is_organization_public,
+            'is_section_public' => (bool) $user->is_section_public,
+            'is_bio_public' => (bool) $user->is_bio_public,
             'profile_picture_path' => $this->currentProfilePicturePath($user),
         ];
 

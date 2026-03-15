@@ -103,7 +103,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'LNU Marketplace',
+                    'LNU Student Square',
                     style: TextStyle(
                       color: kGold,
                       fontSize: 12,

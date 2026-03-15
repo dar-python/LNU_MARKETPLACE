@@ -142,7 +142,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    'LNU Marketplace',
+                    'LNU Student Square',
                     style: TextStyle(
                       color: kWhite,
                       fontSize: 22,

@@ -189,6 +189,30 @@ class _HomePageState extends State<HomePage> {
     await _openAuthenticatedPage(const MyListingsPage());
   }
 
+  Future<void> _openProfilePage() async {
+    if (!AuthService().hasSession) {
+      await _openAuthenticatedPage(const ProfilePage());
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = 3;
+    });
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ProfilePage()),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = 0;
+    });
+  }
+
   Future<void> _openOwnerListing(Listing listing) async {
     if (listing.isModerationApproved) {
       await _openListing(listing);
@@ -352,7 +376,7 @@ class _HomePageState extends State<HomePage> {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'LNU Marketplace',
+                    'LNU Student Square',
                     style: TextStyle(
                       color: kWhite,
                       fontWeight: FontWeight.w800,
@@ -396,7 +420,17 @@ class _HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          _buildHeaderAvatar(currentUser),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _openProfilePage(),
+              customBorder: const CircleBorder(),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: _buildHeaderAvatar(currentUser),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -833,7 +867,7 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.person_rounded,
               label: 'Profile',
               isActive: _selectedIndex == 3,
-              onTap: () => _openAuthenticatedPage(const ProfilePage()),
+              onTap: () => _openProfilePage(),
             ),
           ],
         ),
