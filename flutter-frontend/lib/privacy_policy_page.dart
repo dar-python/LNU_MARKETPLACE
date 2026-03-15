@@ -55,8 +55,12 @@ class _PolicyDetailsPageState extends State<PolicyDetailsPage> {
       backgroundColor: kPageBackground,
       appBar: AppBar(
         backgroundColor: kNavy,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
-        title: const Text('Privacy Policy & Terms'),
+        title: const Text(
+          'Privacy Policy & Terms',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

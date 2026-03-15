@@ -11,8 +11,9 @@ class AboutPage extends StatelessWidget {
       backgroundColor: kPageBackground,
       appBar: AppBar(
         backgroundColor: kNavy,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
-        title: const Text('About'),
+        title: const Text('About', style: TextStyle(color: Colors.white)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),

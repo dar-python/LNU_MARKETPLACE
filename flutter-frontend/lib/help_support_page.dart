@@ -31,8 +31,12 @@ class HelpSupportPage extends StatelessWidget {
       backgroundColor: kPageBackground,
       appBar: AppBar(
         backgroundColor: kNavy,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
-        title: const Text('Help & Support'),
+        title: const Text(
+          'Help & Support',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -211,8 +215,12 @@ class _ContactFormPageState extends State<_ContactFormPage> {
       backgroundColor: kPageBackground,
       appBar: AppBar(
         backgroundColor: kNavy,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
-        title: const Text('Report / Suggestion'),
+        title: const Text(
+          'Report / Suggestion',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
