@@ -130,6 +130,30 @@ class ProfileUpdateApiTest extends TestCase
             ->assertJsonPath('data.user.profile_picture_path', $user->profile_picture_path);
     }
 
+    public function test_authenticated_user_can_update_profile_privacy_with_string_boolean_values(): void
+    {
+        $user = $this->createUser('2309902');
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        $this
+            ->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/api/v1/auth/update-profile', [
+                'is_contact_public' => 'true',
+                'is_program_public' => 'false',
+                'is_year_level_public' => '1',
+                'is_organization_public' => '0',
+                'is_section_public' => 'true',
+                'is_bio_public' => 'false',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.user.is_contact_public', true)
+            ->assertJsonPath('data.user.is_program_public', false)
+            ->assertJsonPath('data.user.is_year_level_public', true)
+            ->assertJsonPath('data.user.is_organization_public', false)
+            ->assertJsonPath('data.user.is_section_public', true)
+            ->assertJsonPath('data.user.is_bio_public', false);
+    }
+
     private function createUser(string $studentId): User
     {
         $attributes = [

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
 import 'auth_service.dart';
+import 'home_page.dart';
 import 'register_page.dart';
-import 'profile_page.dart';
 import 'verify_otp_page.dart';
 import 'forgotpassword.dart';
 
@@ -43,6 +44,14 @@ class _LoginPageState extends State<LoginPage> {
     _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _goToHome() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const HomePage()),
+      (Route<dynamic> route) => false,
+    );
   }
 
   Future<void> _login() async {
@@ -99,9 +108,10 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _errorMessage = error);
     } else {
       if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const ProfilePage()),
+        MaterialPageRoute(builder: (_) => const HomePage()),
+        (Route<dynamic> route) => false,
       );
     }
   }
@@ -344,7 +354,7 @@ class _LoginPageState extends State<LoginPage> {
                   // Back button
                   Center(
                     child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
+                      onTap: _goToHome,
                       child: Text(
                         '← Back to Home',
                         style: TextStyle(color: Colors.grey[400], fontSize: 12),

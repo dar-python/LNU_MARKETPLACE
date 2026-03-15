@@ -7,6 +7,8 @@ import 'favorite_service.dart';
 import 'listing_model_page.dart';
 import 'listing_service.dart';
 import 'login_page.dart';
+import 'profile_page.dart';
+import 'user_public_profile_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
 const kDarkNavy = Color(0xFF080F45);
@@ -232,6 +234,34 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     }
   }
 
+  Future<void> _openSellerProfile() async {
+    final sellerUserId = _listing.userId;
+    if (sellerUserId <= 0) {
+      _showSnackBar('Seller profile is unavailable right now.');
+      return;
+    }
+
+    final currentUserId = _currentUserId();
+    if (currentUserId != null && currentUserId == sellerUserId) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfilePage()),
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserPublicProfilePage(
+          userId: sellerUserId,
+          initialName: _listing.seller,
+          initialAvatar: _listing.sellerAvatar,
+        ),
+      ),
+    );
+  }
+
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -242,6 +272,15 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  int? _currentUserId() {
+    final rawId = AuthService().currentUser?['id'];
+    if (rawId is int) {
+      return rawId;
+    }
+
+    return int.tryParse(rawId?.toString() ?? '');
   }
 
   @override
@@ -429,86 +468,104 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: kWhite,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _openSellerProfile,
                         borderRadius: BorderRadius.circular(14),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: <Widget>[
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: kGold,
-                            child: Text(
-                              listing.sellerAvatar,
-                              style: const TextStyle(
-                                color: kNavy,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 18,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: kWhite,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: <BoxShadow>[
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
-                            ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(
-                                  listing.seller,
+                          child: Row(
+                            children: <Widget>[
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: kGold,
+                                child: Text(
+                                  listing.sellerAvatar,
                                   style: const TextStyle(
                                     color: kNavy,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 18,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'LNU Student Seller',
-                                  style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 11,
-                                  ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      listing.seller,
+                                      style: const TextStyle(
+                                        color: kNavy,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Tap to view seller profile',
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF4F6FF),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Row(
+                                      children: <Widget>[
+                                        Icon(
+                                          Icons.star_rounded,
+                                          color: kGold,
+                                          size: 14,
+                                        ),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          '4.8',
+                                          style: TextStyle(
+                                            color: kNavy,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: Colors.grey[400],
+                                    size: 20,
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF4F6FF),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Row(
-                              children: <Widget>[
-                                Icon(
-                                  Icons.star_rounded,
-                                  color: kGold,
-                                  size: 14,
-                                ),
-                                SizedBox(width: 3),
-                                Text(
-                                  '4.8',
-                                  style: TextStyle(
-                                    color: kNavy,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
