@@ -14,6 +14,8 @@ class Inquiry extends Model
 
     public const STATUS_ACCEPTED = 'accepted';
 
+    public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_DECLINED = 'declined';
 
     /**
@@ -46,6 +48,8 @@ class Inquiry extends Model
         'message',
         'preferred_contact_method',
         'status',
+        'proof_image_path',
+        'completed_at',
         'decided_at',
         'decided_by',
         'inquiry_status',
@@ -63,6 +67,8 @@ class Inquiry extends Model
         return [
             'preferred_contact_method' => 'string',
             'status' => 'string',
+            'proof_image_path' => 'string',
+            'completed_at' => 'datetime',
             'decided_at' => 'datetime',
             'decided_by' => 'integer',
             'inquiry_status' => 'string',

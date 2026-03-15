@@ -1,6 +1,6 @@
 import 'listing_model_page.dart';
 
-enum InquiryStatus { pending, accepted, declined }
+enum InquiryStatus { pending, accepted, completed, declined }
 
 class Inquiry {
   const Inquiry({
@@ -21,8 +21,16 @@ class Inquiry {
     required this.createdAt,
     required this.status,
     this.inquiryStatus = '',
+    this.proofImagePath,
+    this.completedAt,
     this.decidedAt,
     this.decidedBy,
+    this.counterpartyContact,
+    this.counterpartyProgram,
+    this.counterpartyYearLevel,
+    this.counterpartyOrganization,
+    this.counterpartySection,
+    this.counterpartyBio,
   });
 
   final int id;
@@ -42,8 +50,16 @@ class Inquiry {
   final DateTime createdAt;
   final InquiryStatus status;
   final String inquiryStatus;
+  final String? proofImagePath;
+  final DateTime? completedAt;
   final DateTime? decidedAt;
   final int? decidedBy;
+  final String? counterpartyContact;
+  final String? counterpartyProgram;
+  final String? counterpartyYearLevel;
+  final String? counterpartyOrganization;
+  final String? counterpartySection;
+  final String? counterpartyBio;
 
   factory Inquiry.fromApi(
     Map<String, dynamic> json, {
@@ -62,6 +78,7 @@ class Inquiry {
 
     final senderMap = _mapValue(json['sender']);
     final recipientMap = _mapValue(json['recipient']);
+    final counterpartyMap = _mapValue(json['counterparty']);
     final senderName = _stringValue(senderMap?['full_name'], fallback: 'Buyer');
     final recipientName = _stringValue(
       recipientMap?['full_name'],
@@ -98,8 +115,28 @@ class Inquiry {
       createdAt: _parseDateTime(json['created_at']) ?? DateTime.now(),
       status: _statusFromApi(json['status']),
       inquiryStatus: _stringValue(json['inquiry_status']),
+      proofImagePath: _nullableString(json['proof_image_path']),
+      completedAt: _parseDateTime(json['completed_at']),
       decidedAt: _parseDateTime(json['decided_at']),
       decidedBy: _parseNullableInt(json['decided_by']),
+      counterpartyContact: _nullableString(
+        json['counterparty_contact'] ?? counterpartyMap?['contact_number'],
+      ),
+      counterpartyProgram: _nullableString(
+        json['counterparty_program'] ?? counterpartyMap?['program'],
+      ),
+      counterpartyYearLevel: _nullableString(
+        json['counterparty_year_level'] ?? counterpartyMap?['year_level'],
+      ),
+      counterpartyOrganization: _nullableString(
+        json['counterparty_organization'] ?? counterpartyMap?['organization'],
+      ),
+      counterpartySection: _nullableString(
+        json['counterparty_section'] ?? counterpartyMap?['section'],
+      ),
+      counterpartyBio: _nullableString(
+        json['counterparty_bio'] ?? counterpartyMap?['bio'],
+      ),
     );
   }
 
@@ -121,8 +158,16 @@ class Inquiry {
     DateTime? createdAt,
     InquiryStatus? status,
     String? inquiryStatus,
+    String? proofImagePath,
+    DateTime? completedAt,
     DateTime? decidedAt,
     int? decidedBy,
+    String? counterpartyContact,
+    String? counterpartyProgram,
+    String? counterpartyYearLevel,
+    String? counterpartyOrganization,
+    String? counterpartySection,
+    String? counterpartyBio,
   }) {
     return Inquiry(
       id: id ?? this.id,
@@ -143,8 +188,18 @@ class Inquiry {
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
       inquiryStatus: inquiryStatus ?? this.inquiryStatus,
+      proofImagePath: proofImagePath ?? this.proofImagePath,
+      completedAt: completedAt ?? this.completedAt,
       decidedAt: decidedAt ?? this.decidedAt,
       decidedBy: decidedBy ?? this.decidedBy,
+      counterpartyContact: counterpartyContact ?? this.counterpartyContact,
+      counterpartyProgram: counterpartyProgram ?? this.counterpartyProgram,
+      counterpartyYearLevel:
+          counterpartyYearLevel ?? this.counterpartyYearLevel,
+      counterpartyOrganization:
+          counterpartyOrganization ?? this.counterpartyOrganization,
+      counterpartySection: counterpartySection ?? this.counterpartySection,
+      counterpartyBio: counterpartyBio ?? this.counterpartyBio,
     );
   }
 
@@ -184,6 +239,8 @@ InquiryStatus _statusFromApi(dynamic rawValue) {
   switch (_stringValue(rawValue).toLowerCase()) {
     case 'accepted':
       return InquiryStatus.accepted;
+    case 'completed':
+      return InquiryStatus.completed;
     case 'declined':
       return InquiryStatus.declined;
     default:
@@ -219,6 +276,11 @@ DateTime? _parseDateTime(dynamic rawValue) {
 String _stringValue(dynamic rawValue, {String fallback = ''}) {
   final value = rawValue?.toString().trim() ?? '';
   return value.isEmpty ? fallback : value;
+}
+
+String? _nullableString(dynamic rawValue) {
+  final value = rawValue?.toString().trim() ?? '';
+  return value.isEmpty ? null : value;
 }
 
 Map<String, dynamic>? _mapValue(dynamic rawValue) {

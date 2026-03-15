@@ -633,6 +633,12 @@ class _InquiryCard extends StatelessWidget {
           text: Color(0xFF2E7D32),
           icon: Icons.check_circle_outline_rounded,
         );
+      case InquiryStatus.completed:
+        return const _StatusStyle(
+          bg: Color(0xFFE3F2FD),
+          text: Color(0xFF1565C0),
+          icon: Icons.task_alt_rounded,
+        );
       case InquiryStatus.declined:
         return const _StatusStyle(
           bg: Color(0xFFFFEBEE),
@@ -648,6 +654,8 @@ class _InquiryCard extends StatelessWidget {
         return 'Pending';
       case InquiryStatus.accepted:
         return 'Accepted';
+      case InquiryStatus.completed:
+        return 'Completed';
       case InquiryStatus.declined:
         return 'Declined';
     }
