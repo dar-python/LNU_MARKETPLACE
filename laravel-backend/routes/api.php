@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\ListingController;
 use App\Http\Controllers\Api\V1\ListingImageController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\UserProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/ping', fn () => response()->json([
@@ -35,6 +36,7 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/listings', [ListingController::class, 'index']);
     Route::middleware('auth:sanctum')->get('/listings/mine', [ListingController::class, 'mine']);
     Route::get('/listings/{listing}', [ListingController::class, 'show']);
+    Route::get('/users/{user}/profile', [UserProfileController::class, 'show']);
 
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/favorites', [FavoriteController::class, 'index']);

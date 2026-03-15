@@ -30,6 +30,18 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
+    /**
+     * @var array<string, bool>
+     */
+    private const PROFILE_PRIVACY_FIELDS = [
+        'is_contact_public' => false,
+        'is_program_public' => true,
+        'is_year_level_public' => true,
+        'is_organization_public' => true,
+        'is_section_public' => true,
+        'is_bio_public' => true,
+    ];
+
     public function register(RegisterRequest $request): JsonResponse
     {
         $validated = $request->validated();
@@ -254,21 +266,39 @@ class AuthController extends Controller
 
     public function updateProfile(Request $request): JsonResponse
     {
-        $validated = $request->validate([
+        $availablePrivacyFields = $this->availableProfilePrivacyFields();
+
+        foreach ($availablePrivacyFields as $field) {
+            if (! $request->has($field)) {
+                continue;
+            }
+
+            $normalizedValue = filter_var(
+                $request->input($field),
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE
+            );
+
+            if ($normalizedValue !== null) {
+                $request->merge([$field => $normalizedValue]);
+            }
+        }
+
+        $validationRules = [
             'contact_number' => ['nullable', 'string', 'max:30'],
             'program' => ['nullable', 'string', 'max:100'],
             'year_level' => ['nullable', 'string', 'max:50'],
             'organization' => ['nullable', 'string', 'max:100'],
             'section' => ['nullable', 'string', 'max:50'],
             'bio' => ['nullable', 'string', 'max:1000'],
-            'is_contact_public' => ['sometimes', 'boolean'],
-            'is_program_public' => ['sometimes', 'boolean'],
-            'is_year_level_public' => ['sometimes', 'boolean'],
-            'is_organization_public' => ['sometimes', 'boolean'],
-            'is_section_public' => ['sometimes', 'boolean'],
-            'is_bio_public' => ['sometimes', 'boolean'],
             'profile_picture' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-        ]);
+        ];
+
+        foreach ($availablePrivacyFields as $field) {
+            $validationRules[$field] = ['sometimes', 'boolean'];
+        }
+
+        $validated = $request->validate($validationRules);
 
         $user = $request->user()->loadMissing('roles');
         $profilePicture = $request->file('profile_picture');
@@ -280,7 +310,7 @@ class AuthController extends Controller
                 $storedPath = $profilePicture->store('profile-pictures/'.$user->id, 'public');
             }
 
-            DB::transaction(function () use ($user, $validated, $storedPath): void {
+            DB::transaction(function () use ($user, $validated, $storedPath, $availablePrivacyFields): void {
                 $updates = [];
 
                 foreach (['contact_number', 'program', 'year_level', 'organization', 'section', 'bio'] as $field) {
@@ -289,14 +319,7 @@ class AuthController extends Controller
                     }
                 }
 
-                foreach ([
-                    'is_contact_public',
-                    'is_program_public',
-                    'is_year_level_public',
-                    'is_organization_public',
-                    'is_section_public',
-                    'is_bio_public',
-                ] as $field) {
+                foreach ($availablePrivacyFields as $field) {
                     if (array_key_exists($field, $validated)) {
                         $updates[$field] = (bool) $validated[$field];
                     }
@@ -924,12 +947,12 @@ class AuthController extends Controller
             'organization' => $user->organization,
             'section' => $user->section,
             'bio' => $user->bio,
-            'is_contact_public' => (bool) $user->is_contact_public,
-            'is_program_public' => (bool) $user->is_program_public,
-            'is_year_level_public' => (bool) $user->is_year_level_public,
-            'is_organization_public' => (bool) $user->is_organization_public,
-            'is_section_public' => (bool) $user->is_section_public,
-            'is_bio_public' => (bool) $user->is_bio_public,
+            'is_contact_public' => $this->profilePrivacyValue($user, 'is_contact_public'),
+            'is_program_public' => $this->profilePrivacyValue($user, 'is_program_public'),
+            'is_year_level_public' => $this->profilePrivacyValue($user, 'is_year_level_public'),
+            'is_organization_public' => $this->profilePrivacyValue($user, 'is_organization_public'),
+            'is_section_public' => $this->profilePrivacyValue($user, 'is_section_public'),
+            'is_bio_public' => $this->profilePrivacyValue($user, 'is_bio_public'),
             'profile_picture_path' => $this->currentProfilePicturePath($user),
         ];
 
@@ -968,5 +991,27 @@ class AuthController extends Controller
         return is_string($legacyProfilePhotoPath) && $legacyProfilePhotoPath !== ''
             ? $legacyProfilePhotoPath
             : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function availableProfilePrivacyFields(): array
+    {
+        return array_values(array_filter(
+            array_keys(self::PROFILE_PRIVACY_FIELDS),
+            static fn (string $field): bool => Schema::hasColumn('users', $field)
+        ));
+    }
+
+    private function profilePrivacyValue(User $user, string $field): bool
+    {
+        $fallback = self::PROFILE_PRIVACY_FIELDS[$field] ?? true;
+
+        if (! Schema::hasColumn('users', $field)) {
+            return $fallback;
+        }
+
+        return (bool) $user->{$field};
     }
 }

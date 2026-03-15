@@ -329,7 +329,11 @@ class ListingController extends Controller
     private function visibleListingsQuery(): Builder
     {
         $query = Listing::query()
-            ->with(['category:id,name,slug', 'listingImages'])
+            ->with([
+                'category:id,name,slug',
+                'listingImages',
+                'user:id,first_name,middle_name,last_name',
+            ])
             ->whereIn('listing_status', self::BROWSE_VISIBLE_STATUSES)
             ->where('is_flagged', false);
 
@@ -353,6 +357,7 @@ class ListingController extends Controller
                 'category:id,name,slug',
                 'listingImages',
                 'approvedByUser:id,first_name,middle_name,last_name',
+                'user:id,first_name,middle_name,last_name',
             ])
             ->where('user_id', $userId);
     }
@@ -371,6 +376,7 @@ class ListingController extends Controller
             'price' => $listing->price,
             'item_condition' => (string) $listing->item_condition,
             'listing_status' => (string) $listing->listing_status,
+            'seller_name' => $listing->user?->fullName() ?? 'LNU Seller',
             'meetup_arrangement' => $listing->meetup_arrangement,
             'service_type' => $listing->service_type,
             'service_mode' => $listing->service_mode,
@@ -416,6 +422,7 @@ class ListingController extends Controller
             'item_status' => $this->listingItemStatus($listing),
             'moderation_status' => $moderationStatus,
             'moderation_label' => $this->listingModerationLabel($moderationStatus),
+            'seller_name' => $listing->user?->fullName() ?? 'LNU Seller',
             'admin_note' => $moderationStatus === 'declined' && $adminNote !== '' ? $adminNote : null,
             'moderation_note' => $adminNote !== '' ? $adminNote : null,
             'meetup_arrangement' => $listing->meetup_arrangement,

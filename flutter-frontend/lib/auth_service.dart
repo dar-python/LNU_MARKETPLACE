@@ -320,22 +320,24 @@ class AuthService {
         formMap['bio'] = bio.trim();
       }
       if (isContactPublic != null) {
-        formMap['is_contact_public'] = isContactPublic;
+        formMap['is_contact_public'] = _multipartBoolean(isContactPublic);
       }
       if (isProgramPublic != null) {
-        formMap['is_program_public'] = isProgramPublic;
+        formMap['is_program_public'] = _multipartBoolean(isProgramPublic);
       }
       if (isYearLevelPublic != null) {
-        formMap['is_year_level_public'] = isYearLevelPublic;
+        formMap['is_year_level_public'] = _multipartBoolean(isYearLevelPublic);
       }
       if (isOrganizationPublic != null) {
-        formMap['is_organization_public'] = isOrganizationPublic;
+        formMap['is_organization_public'] = _multipartBoolean(
+          isOrganizationPublic,
+        );
       }
       if (isSectionPublic != null) {
-        formMap['is_section_public'] = isSectionPublic;
+        formMap['is_section_public'] = _multipartBoolean(isSectionPublic);
       }
       if (isBioPublic != null) {
-        formMap['is_bio_public'] = isBioPublic;
+        formMap['is_bio_public'] = _multipartBoolean(isBioPublic);
       }
       if (profilePicture != null) {
         formMap['profile_picture'] = await MultipartFile.fromFile(
@@ -546,6 +548,10 @@ class AuthService {
       default:
         return fallback;
     }
+  }
+
+  String _multipartBoolean(bool value) {
+    return value ? '1' : '0';
   }
 
   Future<void> _clearLocalSession() async {

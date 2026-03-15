@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'auth_service.dart';
-import 'profile_page.dart';
+import 'home_page.dart';
 
 class VerifyOtpPage extends StatefulWidget {
   const VerifyOtpPage({
@@ -134,8 +134,8 @@ class _VerifyOtpPageState extends State<VerifyOtpPage> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const ProfilePage()),
-      (route) => route.isFirst,
+      MaterialPageRoute(builder: (_) => const HomePage()),
+      (Route<dynamic> route) => false,
     );
   }
 
