@@ -74,7 +74,8 @@ Route::prefix('v1')->group(function (): void {
             'destroy',
         ]);
         Route::patch('/inquiries/{inquiry}/decision', [InquiryController::class, 'decide']);
-        Route::post('/inquiries/{inquiry}/complete', [InquiryController::class, 'completeTransaction']);
+        Route::post('/inquiries/{inquiry}/seller-confirm', [InquiryController::class, 'sellerConfirm']);
+        Route::post('/inquiries/{inquiry}/buyer-confirm', [InquiryController::class, 'buyerConfirm']);
         Route::post('/listings/{listing}/images', [ListingImageController::class, 'store']);
         Route::delete('/listings/{listing}/images/{image}', [ListingImageController::class, 'destroy']);
     });

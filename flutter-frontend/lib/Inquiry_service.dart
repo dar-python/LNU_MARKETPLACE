@@ -101,32 +101,66 @@ class InquiryService {
     );
   }
 
-  Future<Inquiry> completeTransaction({
+  Future<Inquiry> sellerConfirmTransaction({
     required int inquiryId,
     required File proofImage,
     Inquiry? fallback,
   }) async {
-    final response = await _apiClient.dio.post(
-      '/api/v1/inquiries/$inquiryId/complete',
-      data: FormData.fromMap(<String, dynamic>{
-        'proof_image': await MultipartFile.fromFile(
-          proofImage.path,
-          filename: _safeFileName(proofImage),
-        ),
-      }),
-      options: Options(contentType: 'multipart/form-data'),
-    );
+    try {
+      final response = await _apiClient.dio.post(
+        '/api/v1/inquiries/$inquiryId/seller-confirm',
+        data: FormData.fromMap(<String, dynamic>{
+          'proof_image': await MultipartFile.fromFile(
+            proofImage.path,
+            filename: _safeFileName(proofImage),
+          ),
+        }),
+        options: Options(contentType: 'multipart/form-data'),
+      );
 
-    final rawInquiry = _apiClient.extractDataItemMap(response.data, 'inquiry');
-    if (rawInquiry == null) {
-      throw const FormatException('Invalid inquiry payload.');
+      final rawInquiry = _apiClient.extractDataItemMap(
+        response.data,
+        'inquiry',
+      );
+      if (rawInquiry == null) {
+        throw const FormatException('Invalid inquiry payload.');
+      }
+
+      return Inquiry.fromApi(
+        rawInquiry,
+        fallbackListing: _fallbackListingFromInquiry(fallback),
+        listingAdapter: _listingAdapter,
+      );
+    } on DioException catch (error) {
+      throw FormatException(_friendlyDioMessage(error));
     }
+  }
 
-    return Inquiry.fromApi(
-      rawInquiry,
-      fallbackListing: _fallbackListingFromInquiry(fallback),
-      listingAdapter: _listingAdapter,
-    );
+  Future<Inquiry> buyerConfirmReceipt({
+    required int inquiryId,
+    Inquiry? fallback,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post(
+        '/api/v1/inquiries/$inquiryId/buyer-confirm',
+      );
+
+      final rawInquiry = _apiClient.extractDataItemMap(
+        response.data,
+        'inquiry',
+      );
+      if (rawInquiry == null) {
+        throw const FormatException('Invalid inquiry payload.');
+      }
+
+      return Inquiry.fromApi(
+        rawInquiry,
+        fallbackListing: _fallbackListingFromInquiry(fallback),
+        listingAdapter: _listingAdapter,
+      );
+    } on DioException catch (error) {
+      throw FormatException(_friendlyDioMessage(error));
+    }
   }
 
   List<Inquiry> _extractInquiryList(dynamic body) {
@@ -184,5 +218,18 @@ class InquiryService {
     }
 
     return 'proof-image.jpg';
+  }
+
+  String _friendlyDioMessage(DioException error) {
+    final responseData = error.response?.data;
+
+    if (responseData is Map) {
+      final rawMessage = responseData['message']?.toString().trim() ?? '';
+      if (rawMessage.isNotEmpty) {
+        return rawMessage;
+      }
+    }
+
+    return _apiClient.mapError(error);
   }
 }

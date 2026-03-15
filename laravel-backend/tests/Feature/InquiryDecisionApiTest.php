@@ -10,7 +10,9 @@ use App\Models\Role;
 use App\Models\StudentIdPrefix;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class InquiryDecisionApiTest extends TestCase
@@ -385,6 +387,97 @@ class InquiryDecisionApiTest extends TestCase
             ->assertJsonStructure(['trace_id']);
     }
 
+    public function test_seller_can_confirm_an_accepted_inquiry_with_proof(): void
+    {
+        Storage::fake('public');
+
+        $seller = $this->createUser();
+        $buyer = $this->createUser();
+        $listing = $this->createListing([
+            'owner' => $seller,
+            'listing_status' => 'reserved',
+        ]);
+        $inquiry = $this->createInquiry($buyer, $listing, [
+            'status' => Inquiry::STATUS_ACCEPTED,
+            'decided_at' => now(),
+            'decided_by' => $seller->id,
+            'inquiry_status' => 'resolved',
+            'responded_at' => now(),
+        ]);
+        $token = $seller->createToken('seller-token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/api/v1/inquiries/'.$inquiry->id.'/seller-confirm', [
+                'proof_image' => UploadedFile::fake()->image('proof.jpg'),
+            ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Seller confirmation recorded.')
+            ->assertJsonPath('data.inquiry.id', $inquiry->id)
+            ->assertJsonPath('data.inquiry.status', Inquiry::STATUS_ACCEPTED)
+            ->assertJsonPath('data.inquiry.buyer_confirmed_at', null);
+
+        $this->assertNotNull($response->json('data.inquiry.seller_confirmed_at'));
+
+        $inquiry->refresh();
+
+        $this->assertNotNull($inquiry->seller_confirmed_at);
+        $this->assertNull($inquiry->buyer_confirmed_at);
+        $this->assertNotNull($inquiry->proof_image_path);
+        Storage::disk('public')->assertExists($inquiry->proof_image_path);
+    }
+
+    public function test_buyer_can_complete_transaction_after_seller_confirmation(): void
+    {
+        $seller = $this->createUser();
+        $buyer = $this->createUser();
+        $listing = $this->createListing([
+            'owner' => $seller,
+            'listing_status' => 'reserved',
+        ]);
+        $inquiry = $this->createInquiry($buyer, $listing, [
+            'status' => Inquiry::STATUS_ACCEPTED,
+            'decided_at' => now(),
+            'decided_by' => $seller->id,
+            'inquiry_status' => 'resolved',
+            'responded_at' => now(),
+            'proof_image_path' => 'inquiries/proof.jpg',
+            'seller_confirmed_at' => now(),
+        ]);
+        $token = $buyer->createToken('buyer-token')->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/v1/inquiries/'.$inquiry->id.'/buyer-confirm');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'Buyer confirmation recorded.')
+            ->assertJsonPath('data.inquiry.id', $inquiry->id)
+            ->assertJsonPath('data.inquiry.status', Inquiry::STATUS_COMPLETED)
+            ->assertJsonPath('data.inquiry.listing.listing_status', 'sold');
+
+        $this->assertNotNull($response->json('data.inquiry.buyer_confirmed_at'));
+        $this->assertNotNull($response->json('data.inquiry.completed_at'));
+
+        $this->assertDatabaseHas('inquiries', [
+            'id' => $inquiry->id,
+            'status' => Inquiry::STATUS_COMPLETED,
+            'inquiry_status' => 'completed',
+        ]);
+        $this->assertDatabaseHas('listings', [
+            'id' => $listing->id,
+            'listing_status' => 'sold',
+        ]);
+
+        $inquiry->refresh();
+
+        $this->assertNotNull($inquiry->buyer_confirmed_at);
+        $this->assertNotNull($inquiry->completed_at);
+    }
+
     private function createUser(bool $isDisabled = false): User
     {
         $studentSuffix = str_pad((string) $this->studentIdCounter, 4, '0', STR_PAD_LEFT);
@@ -456,7 +549,7 @@ class InquiryDecisionApiTest extends TestCase
             'title' => 'Listing '.$this->categoryCounter,
             'description' => 'Listing description',
             'price' => '100.00',
-            'item_condition' => 'preowned',
+            'item_condition' => 'used',
             'quantity' => 1,
             'is_negotiable' => false,
             'campus_location' => 'LNU Main Campus',

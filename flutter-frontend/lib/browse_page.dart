@@ -8,7 +8,9 @@ import 'listing_service.dart';
 
 // ─── Browse Page ──────────────────────────────────────────────────────────────
 class BrowsePage extends StatefulWidget {
-  const BrowsePage({super.key});
+  const BrowsePage({super.key, this.initialCategory});
+
+  final String? initialCategory;
 
   @override
   State<BrowsePage> createState() => _BrowsePageState();
@@ -27,21 +29,17 @@ class _BrowsePageState extends State<BrowsePage> {
   List<Listing> _listings = <Listing>[];
   ListingPagination? _pagination;
 
-  final List<String> _categories = [
+  final List<String> _categories = <String>[
     'All',
-    'Gadgets',
-    'Lab Tools',
-    'Sports',
-    'Equipment',
-    'School Supplies',
-    'Clothing',
-    'Electronics',
     'Books',
     'Uniforms',
-    'Food',
-    'Drinks',
-    'Accessories',
-    'Others',
+    'Gadgets',
+    'Lab Tools',
+    'Tutoring',
+    'Editing',
+    'Design',
+    'Commission',
+    'Repair',
   ];
 
   List<Listing> get _filteredListings {
@@ -59,6 +57,10 @@ class _BrowsePageState extends State<BrowsePage> {
   @override
   void initState() {
     super.initState();
+    final initialCategory = widget.initialCategory;
+    if (initialCategory != null && _categories.contains(initialCategory)) {
+      _selectedCategory = initialCategory;
+    }
     _loadListings();
   }
 
@@ -422,25 +424,16 @@ class _ListingCard extends StatelessWidget {
               ),
               child: Stack(
                 children: [
-                  listing.imageFile != null
-                      ? ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(16),
-                          ),
-                          child: Image.file(
-                            listing.imageFile!,
-                            width: double.infinity,
-                            height: 110,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : Center(
-                          child: Icon(
-                            listing.icon,
-                            size: 48,
-                            color: kNavy.withValues(alpha: 0.3),
-                          ),
-                        ),
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 110,
+                      child: _buildListingImage(),
+                    ),
+                  ),
                   Positioned(
                     top: 8,
                     right: 8,
@@ -525,6 +518,32 @@ class _ListingCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildListingImage() {
+    if (listing.imageUrl != null) {
+      return Image.network(
+        listing.imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
+      );
+    }
+
+    if (listing.imageFile != null) {
+      return Image.file(
+        listing.imageFile!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
+      );
+    }
+
+    return _buildFallbackIcon();
+  }
+
+  Widget _buildFallbackIcon() {
+    return Center(
+      child: Icon(listing.icon, size: 48, color: kNavy.withValues(alpha: 0.3)),
     );
   }
 }

@@ -36,6 +36,8 @@ void main() {
         'status': 'pending',
         'inquiry_status': 'new',
         'created_at': '2026-03-09T09:30:00Z',
+        'seller_confirmed_at': '2026-03-10T09:30:00Z',
+        'buyer_confirmed_at': '2026-03-11T09:30:00Z',
         'listing': <String, dynamic>{
           'id': 44,
           'title': 'Calculus Book',
@@ -54,6 +56,8 @@ void main() {
       expect(inquiry.preferredContactLabel, 'Email');
       expect(inquiry.counterpartyName(isReceived: true), 'Miguel Santos');
       expect(inquiry.counterpartyName(isReceived: false), 'Alicia Cruz');
+      expect(inquiry.sellerConfirmedAt, isNotNull);
+      expect(inquiry.buyerConfirmedAt, isNotNull);
     },
   );
 }
