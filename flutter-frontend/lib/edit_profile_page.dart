@@ -181,8 +181,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
       backgroundColor: kPageBackground,
       appBar: AppBar(
         backgroundColor: kNavy,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
-        title: const Text('Edit Profile'),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),

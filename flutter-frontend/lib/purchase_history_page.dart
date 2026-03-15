@@ -106,8 +106,12 @@ class _PurchaseHistoryPageState extends State<PurchaseHistoryPage> {
         backgroundColor: kPageBackground,
         appBar: AppBar(
           backgroundColor: kNavy,
+          iconTheme: const IconThemeData(color: Colors.white),
           centerTitle: true,
-          title: const Text('Purchase History'),
+          title: const Text(
+            'Purchase History',
+            style: TextStyle(color: Colors.white),
+          ),
         ),
         body: const Center(child: CircularProgressIndicator(color: kNavy)),
       );
@@ -117,8 +121,12 @@ class _PurchaseHistoryPageState extends State<PurchaseHistoryPage> {
       backgroundColor: kPageBackground,
       appBar: AppBar(
         backgroundColor: kNavy,
+        iconTheme: const IconThemeData(color: Colors.white),
         centerTitle: true,
-        title: const Text('Purchase History'),
+        title: const Text(
+          'Purchase History',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: RefreshIndicator(
         color: kNavy,
