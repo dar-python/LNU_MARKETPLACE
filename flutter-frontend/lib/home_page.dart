@@ -160,14 +160,16 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _openBrowsePage() async {
+  Future<void> _openBrowsePage({String? initialCategory}) async {
     setState(() {
       _selectedIndex = 1;
     });
 
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const BrowsePage()),
+      MaterialPageRoute(
+        builder: (_) => BrowsePage(initialCategory: initialCategory),
+      ),
     );
 
     if (!mounted) {
@@ -450,7 +452,7 @@ class _HomePageState extends State<HomePage> {
         child: TextField(
           controller: _searchController,
           readOnly: true,
-          onTap: _openBrowsePage,
+          onTap: () => _openBrowsePage(),
           decoration: InputDecoration(
             hintText: 'Search books, uniforms, gadgets...',
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
@@ -558,7 +560,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
-                        onPressed: _openBrowsePage,
+                        onPressed: () => _openBrowsePage(),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: kGold,
                           foregroundColor: kNavy,
@@ -680,6 +682,7 @@ class _HomePageState extends State<HomePage> {
                 return _CategoryChip(
                   icon: category.icon,
                   label: category.label,
+                  onTap: () => _openBrowsePage(initialCategory: category.label),
                 );
               },
             ),
@@ -964,46 +967,54 @@ class _HomeCategory {
 }
 
 class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({required this.icon, required this.label});
+  const _CategoryChip({required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 96,
-      child: Column(
-        children: <Widget>[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: kNavy,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: <BoxShadow>[
-                BoxShadow(
-                  color: kNavy.withValues(alpha: 0.25),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: 96,
+          child: Column(
+            children: <Widget>[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: kNavy,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: kNavy.withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Icon(icon, color: kGold, size: 24),
+                child: Icon(icon, color: kGold, size: 24),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: kNavy,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: kNavy,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
