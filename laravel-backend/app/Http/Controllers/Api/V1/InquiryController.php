@@ -207,7 +207,7 @@ class InquiryController extends Controller
         ]);
     }
 
-    public function completeTransaction(Request $request, Inquiry $inquiry): JsonResponse
+    public function sellerConfirm(Request $request, Inquiry $inquiry): JsonResponse
     {
         $userId = $request->user()?->id;
 
@@ -216,71 +216,50 @@ class InquiryController extends Controller
         }
 
         if ((string) $inquiry->status !== Inquiry::STATUS_ACCEPTED) {
-            return $this->acceptedCompletionError();
+            return $this->acceptedConfirmationError();
+        }
+
+        if ($inquiry->seller_confirmed_at !== null) {
+            return ApiResponse::error('Seller has already confirmed this transaction.', [
+                'seller_confirmed_at' => ['The seller confirmation has already been recorded.'],
+            ], 422);
         }
 
         $request->validate([
-            'proof_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'proof_image' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
         $proofImage = $request->file('proof_image');
         $storedPath = null;
         $previousProofImagePath = $this->nullableString($inquiry->proof_image_path);
-        $completedAt = now();
+        $sellerConfirmedAt = now();
 
         try {
-            if ($proofImage instanceof UploadedFile) {
-                $storedPath = $proofImage->store('inquiries/'.$inquiry->id, 'public');
+            if (! $proofImage instanceof UploadedFile) {
+                throw new \RuntimeException('The uploaded proof image is invalid.');
             }
 
-            DB::transaction(function () use ($request, $inquiry, $storedPath, $completedAt): void {
-                $lockedInquiry = Inquiry::query()
-                    ->lockForUpdate()
-                    ->findOrFail($inquiry->id);
+            $storedPath = $proofImage->store('inquiries/'.$inquiry->id, 'public');
 
-                if ((string) $lockedInquiry->status !== Inquiry::STATUS_ACCEPTED) {
-                    throw new HttpResponseException($this->acceptedCompletionError());
-                }
+            $lockedInquiry = Inquiry::query()
+                ->whereKey($inquiry->id)
+                ->firstOrFail();
 
-                $listing = Listing::query()
-                    ->lockForUpdate()
-                    ->findOrFail($lockedInquiry->listing_id);
+            if ((string) $lockedInquiry->status !== Inquiry::STATUS_ACCEPTED) {
+                throw new \RuntimeException('Only accepted inquiries can proceed to confirmation.');
+            }
 
-                $listingStatusBeforeCompletion = (string) $listing->listing_status;
-                $listingStatusAfterCompletion = self::SOLD_LISTING_STATUS;
-                $updates = [
-                    'status' => Inquiry::STATUS_COMPLETED,
-                    'completed_at' => $completedAt,
-                    'inquiry_status' => $this->legacyInquiryStatus(Inquiry::STATUS_COMPLETED),
-                    'responded_at' => $completedAt,
-                ];
-
-                if (is_string($storedPath) && $storedPath !== '') {
-                    $updates['proof_image_path'] = $storedPath;
-                }
-
-                $lockedInquiry->fill($updates);
-                $lockedInquiry->save();
-
-                if ($listing->listing_status !== self::SOLD_LISTING_STATUS) {
-                    $listing->forceFill([
-                        'listing_status' => self::SOLD_LISTING_STATUS,
-                    ])->save();
-                }
-
-                $this->logCompletionActivity(
-                    $request,
-                    $lockedInquiry,
-                    $listingStatusBeforeCompletion,
-                    $listingStatusAfterCompletion
-                );
-            });
+            $lockedInquiry->fill([
+                'proof_image_path' => $storedPath,
+                'seller_confirmed_at' => $sellerConfirmedAt,
+            ]);
+            $lockedInquiry->save();
         } catch (\Throwable $throwable) {
             if (is_string($storedPath) && $storedPath !== '') {
                 Storage::disk('public')->delete($storedPath);
             }
 
-            throw $throwable;
+            return ApiResponse::error($throwable->getMessage(), null, 500);
         }
 
         if (
@@ -293,7 +272,99 @@ class InquiryController extends Controller
             Storage::disk('public')->delete($previousProofImagePath);
         }
 
-        return ApiResponse::success('Inquiry transaction completed.', [
+        return ApiResponse::success('Seller confirmation recorded.', [
+            'inquiry' => $this->serializeInquiry(
+                $this->inquiryQuery()->whereKey($inquiry->id)->firstOrFail(),
+                $userId
+            ),
+        ]);
+    }
+
+    public function buyerConfirm(Request $request, Inquiry $inquiry): JsonResponse
+    {
+        $userId = $request->user()?->id;
+
+        if (! is_int($userId) || $userId !== (int) $inquiry->sender_user_id) {
+            return ApiResponse::error('Forbidden.', null, 403);
+        }
+
+        if ((string) $inquiry->status !== Inquiry::STATUS_ACCEPTED) {
+            return $this->acceptedConfirmationError();
+        }
+
+        if ($inquiry->seller_confirmed_at === null) {
+            return ApiResponse::error('Seller confirmation is required before buyer confirmation.', [
+                'seller_confirmed_at' => ['The seller must confirm the transaction first.'],
+            ], 422);
+        }
+
+        if ($inquiry->buyer_confirmed_at !== null) {
+            return ApiResponse::error('Buyer has already confirmed receipt.', [
+                'buyer_confirmed_at' => ['The buyer confirmation has already been recorded.'],
+            ], 422);
+        }
+
+        DB::transaction(function () use ($request, $inquiry, $userId): void {
+            $lockedInquiry = Inquiry::query()
+                ->lockForUpdate()
+                ->findOrFail($inquiry->id);
+
+            if ((int) $lockedInquiry->sender_user_id !== $userId) {
+                throw new HttpResponseException(ApiResponse::error('Forbidden.', null, 403));
+            }
+
+            if ((string) $lockedInquiry->status !== Inquiry::STATUS_ACCEPTED) {
+                throw new HttpResponseException($this->acceptedConfirmationError());
+            }
+
+            if ($lockedInquiry->seller_confirmed_at === null) {
+                throw ValidationException::withMessages([
+                    'seller_confirmed_at' => ['The seller must confirm the transaction first.'],
+                ]);
+            }
+
+            if ($lockedInquiry->buyer_confirmed_at !== null) {
+                throw ValidationException::withMessages([
+                    'buyer_confirmed_at' => ['The buyer confirmation has already been recorded.'],
+                ]);
+            }
+
+            $listing = Listing::query()
+                ->lockForUpdate()
+                ->findOrFail($lockedInquiry->listing_id);
+
+            $completedAt = now();
+            $listingStatusBeforeCompletion = (string) $listing->listing_status;
+            $listingStatusAfterCompletion = self::SOLD_LISTING_STATUS;
+
+            $lockedInquiry->fill([
+                'buyer_confirmed_at' => $completedAt,
+                'status' => Inquiry::STATUS_COMPLETED,
+                'completed_at' => $completedAt,
+                'inquiry_status' => $this->legacyInquiryStatus(Inquiry::STATUS_COMPLETED),
+                'responded_at' => $completedAt,
+            ]);
+            $lockedInquiry->save();
+
+            if (
+                $listing->listing_status !== self::SOLD_LISTING_STATUS
+                || $listing->sold_at === null
+            ) {
+                $listing->forceFill([
+                    'listing_status' => self::SOLD_LISTING_STATUS,
+                    'sold_at' => $completedAt,
+                ])->save();
+            }
+
+            $this->logCompletionActivity(
+                $request,
+                $lockedInquiry,
+                $listingStatusBeforeCompletion,
+                $listingStatusAfterCompletion
+            );
+        });
+
+        return ApiResponse::success('Buyer confirmation recorded.', [
             'inquiry' => $this->serializeInquiry(
                 $this->inquiryQuery()->whereKey($inquiry->id)->firstOrFail(),
                 $userId
@@ -350,10 +421,10 @@ class InquiryController extends Controller
         ], 422);
     }
 
-    private function acceptedCompletionError(): JsonResponse
+    private function acceptedConfirmationError(): JsonResponse
     {
-        return ApiResponse::error('Only accepted inquiries can be completed.', [
-            'status' => ['The inquiry must be accepted before it can be marked as completed.'],
+        return ApiResponse::error('Only accepted inquiries can proceed to confirmation.', [
+            'status' => ['The inquiry must be accepted before it can proceed to confirmation.'],
         ], 422);
     }
 
@@ -449,6 +520,8 @@ class InquiryController extends Controller
             'inquiry_status' => $inquiry->inquiry_status,
             'proof_image_path' => $this->nullableString($inquiry->proof_image_path),
             'completed_at' => $inquiry->completed_at?->toJSON(),
+            'seller_confirmed_at' => $inquiry->seller_confirmed_at?->toJSON(),
+            'buyer_confirmed_at' => $inquiry->buyer_confirmed_at?->toJSON(),
             'decided_at' => $inquiry->decided_at?->toJSON(),
             'decided_by' => $inquiry->decided_by === null ? null : (int) $inquiry->decided_by,
             'created_at' => $inquiry->created_at?->toISOString(),

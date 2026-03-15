@@ -23,6 +23,8 @@ class Inquiry {
     this.inquiryStatus = '',
     this.proofImagePath,
     this.completedAt,
+    this.sellerConfirmedAt,
+    this.buyerConfirmedAt,
     this.decidedAt,
     this.decidedBy,
     this.counterpartyContact,
@@ -52,6 +54,8 @@ class Inquiry {
   final String inquiryStatus;
   final String? proofImagePath;
   final DateTime? completedAt;
+  final DateTime? sellerConfirmedAt;
+  final DateTime? buyerConfirmedAt;
   final DateTime? decidedAt;
   final int? decidedBy;
   final String? counterpartyContact;
@@ -117,6 +121,8 @@ class Inquiry {
       inquiryStatus: _stringValue(json['inquiry_status']),
       proofImagePath: _nullableString(json['proof_image_path']),
       completedAt: _parseDateTime(json['completed_at']),
+      sellerConfirmedAt: _parseDateTime(json['seller_confirmed_at']),
+      buyerConfirmedAt: _parseDateTime(json['buyer_confirmed_at']),
       decidedAt: _parseDateTime(json['decided_at']),
       decidedBy: _parseNullableInt(json['decided_by']),
       counterpartyContact: _nullableString(
@@ -160,6 +166,8 @@ class Inquiry {
     String? inquiryStatus,
     String? proofImagePath,
     DateTime? completedAt,
+    DateTime? sellerConfirmedAt,
+    DateTime? buyerConfirmedAt,
     DateTime? decidedAt,
     int? decidedBy,
     String? counterpartyContact,
@@ -190,6 +198,8 @@ class Inquiry {
       inquiryStatus: inquiryStatus ?? this.inquiryStatus,
       proofImagePath: proofImagePath ?? this.proofImagePath,
       completedAt: completedAt ?? this.completedAt,
+      sellerConfirmedAt: sellerConfirmedAt ?? this.sellerConfirmedAt,
+      buyerConfirmedAt: buyerConfirmedAt ?? this.buyerConfirmedAt,
       decidedAt: decidedAt ?? this.decidedAt,
       decidedBy: decidedBy ?? this.decidedBy,
       counterpartyContact: counterpartyContact ?? this.counterpartyContact,

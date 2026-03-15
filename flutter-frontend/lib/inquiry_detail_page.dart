@@ -37,6 +37,7 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
   bool _isCompletingTransaction = false;
   bool _isRedirectingToLogin = false;
   String? _errorMessage;
+  String _transactionProgressLabel = 'Processing transaction...';
 
   @override
   void initState() {
@@ -87,7 +88,7 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
     }
   }
 
-  Future<void> _handleCompleteTransaction() async {
+  Future<void> _handleSellerConfirmTransaction() async {
     if (_isCompletingTransaction) {
       return;
     }
@@ -118,12 +119,73 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
 
     setState(() {
       _isCompletingTransaction = true;
+      _transactionProgressLabel = 'Uploading proof of transaction...';
     });
 
     try {
-      updatedInquiry = await InquiryService().completeTransaction(
+      updatedInquiry = await InquiryService().sellerConfirmTransaction(
         inquiryId: _inquiry.id,
         proofImage: File(pickedImage.path),
+        fallback: _inquiry,
+      );
+    } catch (error) {
+      final sessionExpired = await AuthService().clearSessionIfUnauthorized(
+        error,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      if (sessionExpired) {
+        await _redirectToLogin();
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is FormatException
+                ? error.message
+                : _apiClient.mapError(error),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCompletingTransaction = false;
+        });
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _inquiry = updatedInquiry;
+    });
+
+    await _loadInquiry();
+  }
+
+  Future<void> _handleBuyerConfirmReceipt() async {
+    if (_isCompletingTransaction) {
+      return;
+    }
+
+    late final Inquiry updatedInquiry;
+
+    setState(() {
+      _isCompletingTransaction = true;
+      _transactionProgressLabel = 'Confirming item receipt...';
+    });
+
+    try {
+      updatedInquiry = await InquiryService().buyerConfirmReceipt(
+        inquiryId: _inquiry.id,
         fallback: _inquiry,
       );
     } catch (error) {
@@ -246,8 +308,25 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
     final currentUserId = AuthService().currentUser?['id'];
     final isSeller =
         currentUserId is int && currentUserId == inquiry.recipientUserId;
-    final canCompleteTransaction =
-        isSeller && inquiry.status == InquiryStatus.accepted;
+    final isBuyer =
+        currentUserId is int && currentUserId == inquiry.senderUserId;
+    final isSellerConfirmed = inquiry.sellerConfirmedAt != null;
+    final isBuyerConfirmed = inquiry.buyerConfirmedAt != null;
+    final isFullyCompleted = isSellerConfirmed && isBuyerConfirmed;
+    final canSellerConfirm =
+        isSeller &&
+        inquiry.status == InquiryStatus.accepted &&
+        !isSellerConfirmed;
+    final isSellerWaitingForBuyer =
+        isSeller &&
+        inquiry.status == InquiryStatus.accepted &&
+        isSellerConfirmed &&
+        !isBuyerConfirmed;
+    final canBuyerConfirm =
+        isBuyer &&
+        inquiry.status == InquiryStatus.accepted &&
+        isSellerConfirmed &&
+        !isBuyerConfirmed;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
@@ -524,7 +603,39 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
                             ],
                           ),
                         ],
-                        if (canCompleteTransaction) ...<Widget>[
+                        if (isFullyCompleted) ...<Widget>[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFF81C784),
+                              ),
+                            ),
+                            child: const Row(
+                              children: <Widget>[
+                                Icon(
+                                  Icons.verified_rounded,
+                                  color: Color(0xFF2E7D32),
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Transaction Fully Completed',
+                                    style: TextStyle(
+                                      color: Color(0xFF1B5E20),
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (canSellerConfirm) ...<Widget>[
                           const SizedBox(height: 16),
                           SizedBox(
                             width: double.infinity,
@@ -532,7 +643,7 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
                             child: ElevatedButton.icon(
                               onPressed: _isCompletingTransaction
                                   ? null
-                                  : _handleCompleteTransaction,
+                                  : _handleSellerConfirmTransaction,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: kInquiryGold,
                                 foregroundColor: kInquiryNavy,
@@ -544,6 +655,65 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
                               icon: const Icon(Icons.task_alt_rounded),
                               label: const Text(
                                 'Complete Transaction & Attach Proof',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ] else if (isSellerWaitingForBuyer) ...<Widget>[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F7FB),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFD6DEEE),
+                              ),
+                            ),
+                            child: const Row(
+                              children: <Widget>[
+                                Icon(
+                                  Icons.hourglass_top_rounded,
+                                  color: kInquiryNavy,
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Waiting for buyer to confirm receipt.',
+                                    style: TextStyle(
+                                      color: kInquiryNavy,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (canBuyerConfirm) ...<Widget>[
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              onPressed: _isCompletingTransaction
+                                  ? null
+                                  : _handleBuyerConfirmReceipt,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2E7D32),
+                                foregroundColor: kInquiryWhite,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              icon: const Icon(Icons.check_circle_rounded),
+                              label: const Text(
+                                'Confirm Item Received',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
@@ -565,6 +735,20 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
                                 label: 'Decided',
                                 value: _formatDateTime(inquiry.decidedAt!),
                               ),
+                            if (inquiry.sellerConfirmedAt != null)
+                              _InfoRow(
+                                label: 'Seller Confirmed',
+                                value: _formatDateTime(
+                                  inquiry.sellerConfirmedAt!,
+                                ),
+                              ),
+                            if (inquiry.buyerConfirmedAt != null)
+                              _InfoRow(
+                                label: 'Buyer Confirmed',
+                                value: _formatDateTime(
+                                  inquiry.buyerConfirmedAt!,
+                                ),
+                              ),
                             if (inquiry.completedAt != null)
                               _InfoRow(
                                 label: 'Completed',
@@ -582,15 +766,15 @@ class _InquiryDetailPageState extends State<InquiryDetailPage> {
               Positioned.fill(
                 child: ColoredBox(
                   color: Colors.black.withValues(alpha: 0.35),
-                  child: const Center(
+                  child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
-                        CircularProgressIndicator(color: kInquiryWhite),
-                        SizedBox(height: 14),
+                        const CircularProgressIndicator(color: kInquiryWhite),
+                        const SizedBox(height: 14),
                         Text(
-                          'Completing transaction...',
-                          style: TextStyle(
+                          _transactionProgressLabel,
+                          style: const TextStyle(
                             color: kInquiryWhite,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
