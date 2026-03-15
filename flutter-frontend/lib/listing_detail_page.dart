@@ -796,29 +796,7 @@ class _ListingHeroGallery extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: <Widget>[
-          if (images.isNotEmpty)
-            PageView.builder(
-              itemCount: images.length,
-              onPageChanged: onPageChanged,
-              itemBuilder: (context, index) {
-                final image = images[index];
-                return Image.network(
-                  image.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      _ListingFallbackArt(listing: listing),
-                );
-              },
-            )
-          else if (listing.imageFile != null)
-            Image.file(
-              listing.imageFile!,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-            )
-          else
-            _ListingFallbackArt(listing: listing),
+          Hero(tag: 'listing_image_${listing.id}', child: _buildHeroImage()),
           if (images.length > 1)
             Positioned(
               left: 0,
@@ -844,6 +822,35 @@ class _ListingHeroGallery extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildHeroImage() {
+    if (images.isNotEmpty) {
+      return PageView.builder(
+        itemCount: images.length,
+        onPageChanged: onPageChanged,
+        itemBuilder: (context, index) {
+          final image = images[index];
+          return Image.network(
+            image.imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _ListingFallbackArt(listing: listing),
+          );
+        },
+      );
+    }
+
+    if (listing.imageFile != null) {
+      return Image.file(
+        listing.imageFile!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+
+    return _ListingFallbackArt(listing: listing);
   }
 }
 

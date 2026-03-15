@@ -424,14 +424,17 @@ class _ListingCard extends StatelessWidget {
               ),
               child: Stack(
                 children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 110,
-                      child: _buildListingImage(),
+                  Hero(
+                    tag: 'listing_image_${listing.id}',
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 110,
+                        child: _buildListingImage(),
+                      ),
                     ),
                   ),
                   Positioned(

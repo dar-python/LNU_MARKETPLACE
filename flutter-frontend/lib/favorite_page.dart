@@ -12,7 +12,9 @@ const kGold = Color(0xFFF5C518);
 const kWhite = Color(0xFFFFFFFF);
 
 class FavoritesPage extends StatefulWidget {
-  const FavoritesPage({super.key});
+  const FavoritesPage({super.key, this.showBackButton = true});
+
+  final bool showBackButton;
 
   @override
   State<FavoritesPage> createState() => _FavoritesPageState();
@@ -238,22 +240,24 @@ class _FavoritesPageState extends State<FavoritesPage> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: kWhite.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back,
-                        color: kWhite,
-                        size: 20,
+                  if (widget.showBackButton) ...<Widget>[
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: kWhite.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: kWhite,
+                          size: 20,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
+                    const SizedBox(width: 14),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

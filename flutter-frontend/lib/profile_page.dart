@@ -16,7 +16,9 @@ import 'settings_page.dart';
 import 'config/app_config.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({super.key, this.showHomeButton = true});
+
+  final bool showHomeButton;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -308,46 +310,50 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Column(
                   children: [
                     // ── Home Button Row ──────────────────────────────────
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (_) => const HomePage()),
-                            (route) => false,
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
+                    if (widget.showHomeButton) ...<Widget>[
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pushAndRemoveUntil(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const HomePage(),
+                              ),
+                              (route) => false,
                             ),
-                            decoration: BoxDecoration(
-                              color: kWhite.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              children: const [
-                                Icon(
-                                  Icons.home_rounded,
-                                  color: kWhite,
-                                  size: 16,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Home',
-                                  style: TextStyle(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: kWhite.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(
+                                    Icons.home_rounded,
                                     color: kWhite,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                    size: 16,
                                   ),
-                                ),
-                              ],
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Home',
+                                    style: TextStyle(
+                                      color: kWhite,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     _buildProfileAvatar(user),
                     const SizedBox(height: 14),
                     Text(

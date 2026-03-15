@@ -32,12 +32,15 @@ class _HomePageState extends State<HomePage> {
   final ApiClient _apiClient = ApiClient();
 
   int _selectedIndex = 0;
+  int _shellIndex = 0;
   bool _isLoadingListings = true;
   bool _isLoadingMyListings = false;
   String? _listingsErrorMessage;
   String? _myListingsErrorMessage;
   List<Listing> _homeListings = <Listing>[];
   List<Listing> _myListings = <Listing>[];
+  String? _browseInitialCategory;
+  int _browseTabVersion = 0;
 
   final List<_HomeCategory> _categories = const <_HomeCategory>[
     _HomeCategory(icon: Icons.menu_book, label: 'Books'),
@@ -50,15 +53,37 @@ class _HomePageState extends State<HomePage> {
     _HomeCategory(icon: Icons.build, label: 'Repair'),
   ];
 
-  List<Listing> get _featuredListings => _homeListings.take(4).toList();
+  List<Listing> get _featuredListings =>
+      _takeUniqueListings(_homeListings, limit: 4);
 
   List<Listing> get _recentListings {
-    final recentListings = _homeListings.skip(4).take(4).toList();
-    if (recentListings.isNotEmpty) {
-      return recentListings;
+    return _takeUniqueListings(
+      _homeListings,
+      limit: 4,
+      excludedIds: _featuredListings.map((listing) => listing.id).toSet(),
+    );
+  }
+
+  List<Listing> _takeUniqueListings(
+    List<Listing> source, {
+    required int limit,
+    Set<int>? excludedIds,
+  }) {
+    final seenIds = <int>{...?excludedIds};
+    final uniqueListings = <Listing>[];
+
+    for (final listing in source) {
+      if (!seenIds.add(listing.id)) {
+        continue;
+      }
+
+      uniqueListings.add(listing);
+      if (uniqueListings.length == limit) {
+        break;
+      }
     }
 
-    return _homeListings.take(4).toList();
+    return uniqueListings;
   }
 
   @override
@@ -160,24 +185,32 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _openBrowsePage({String? initialCategory}) async {
-    setState(() {
-      _selectedIndex = 1;
-    });
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BrowsePage(initialCategory: initialCategory),
-      ),
-    );
-
-    if (!mounted) {
+  void _showHomeTab() {
+    if (_shellIndex == 0 && _selectedIndex == 0) {
       return;
     }
 
     setState(() {
       _selectedIndex = 0;
+      _shellIndex = 0;
+    });
+  }
+
+  void _openBrowsePage({String? initialCategory}) {
+    final shouldRebuildBrowse =
+        _shellIndex != 1 || initialCategory != _browseInitialCategory;
+
+    if (!shouldRebuildBrowse && _selectedIndex == 1) {
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = 1;
+      _shellIndex = 1;
+      if (shouldRebuildBrowse) {
+        _browseInitialCategory = initialCategory;
+        _browseTabVersion++;
+      }
     });
   }
 
@@ -193,26 +226,53 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openProfilePage() async {
-    if (!AuthService().hasSession) {
-      await _openAuthenticatedPage(const ProfilePage());
+    if (AuthService().hasSession) {
+      setState(() {
+        _selectedIndex = 3;
+        _shellIndex = 3;
+      });
       return;
     }
 
+    await _openBottomNavPage(
+      navIndex: 3,
+      onOpen: () => _openAuthenticatedPage(const ProfilePage()),
+    );
+  }
+
+  Future<void> _openFavoritesPage() async {
+    if (AuthService().hasSession) {
+      setState(() {
+        _selectedIndex = 2;
+        _shellIndex = 2;
+      });
+      return;
+    }
+
+    await _openBottomNavPage(
+      navIndex: 2,
+      onOpen: () => _openAuthenticatedPage(const FavoritesPage()),
+    );
+  }
+
+  Future<void> _openBottomNavPage({
+    required int navIndex,
+    required Future<void> Function() onOpen,
+  }) async {
+    final previousIndex = _selectedIndex;
+
     setState(() {
-      _selectedIndex = 3;
+      _selectedIndex = navIndex;
     });
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ProfilePage()),
-    );
+    await onOpen();
 
     if (!mounted) {
       return;
     }
 
     setState(() {
-      _selectedIndex = 0;
+      _selectedIndex = previousIndex;
     });
   }
 
@@ -300,56 +360,90 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
-      body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            _buildHeader(),
-            Expanded(
-              child: RefreshIndicator(
-                color: kNavy,
-                onRefresh: () async {
-                  await _loadHomeListings(showLoading: false);
-                  await _loadMyListings(showLoading: false);
-                },
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      _buildSearchBar(),
-                      _buildHeroBanner(),
-                      _buildCategories(),
-                      if (AuthService().hasSession) _buildMyListingsSection(),
-                      if (_listingsErrorMessage != null &&
-                          _homeListings.isNotEmpty) ...<Widget>[
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                          child: _HomeStatusCard(
-                            icon: Icons.cloud_off_rounded,
-                            title: 'Could not refresh listings',
-                            message: _listingsErrorMessage!,
-                            actionLabel: 'Retry',
-                            onAction: _loadHomeListings,
-                          ),
-                        ),
-                      ],
-                      _buildFeaturedSection(),
-                      _buildRecentListings(),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (child, animation) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        child: _buildCurrentTabBody(),
       ),
       bottomNavigationBar: _buildBottomNav(),
       floatingActionButton: _buildFAB(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
+  }
+
+  Widget _buildCurrentTabBody() {
+    switch (_shellIndex) {
+      case 1:
+        return KeyedSubtree(
+          key: ValueKey<String>(
+            'browse-$_browseTabVersion-${_browseInitialCategory ?? 'all'}',
+          ),
+          child: BrowsePage(initialCategory: _browseInitialCategory),
+        );
+      case 2:
+        return const KeyedSubtree(
+          key: ValueKey<String>('favorites'),
+          child: FavoritesPage(showBackButton: false),
+        );
+      case 3:
+        return const KeyedSubtree(
+          key: ValueKey<String>('profile'),
+          child: ProfilePage(showHomeButton: false),
+        );
+      default:
+        return KeyedSubtree(
+          key: const ValueKey<String>('home'),
+          child: SafeArea(
+            child: Column(
+              children: <Widget>[
+                _buildHeader(),
+                Expanded(
+                  child: RefreshIndicator(
+                    color: kNavy,
+                    onRefresh: () async {
+                      await _loadHomeListings(showLoading: false);
+                      await _loadMyListings(showLoading: false);
+                    },
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          _buildSearchBar(),
+                          _buildHeroBanner(),
+                          _buildCategories(),
+                          if (AuthService().hasSession)
+                            _buildMyListingsSection(),
+                          if (_listingsErrorMessage != null &&
+                              _homeListings.isNotEmpty) ...<Widget>[
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                              child: _HomeStatusCard(
+                                icon: Icons.cloud_off_rounded,
+                                title: 'Could not refresh listings',
+                                message: _listingsErrorMessage!,
+                                actionLabel: 'Retry',
+                                onAction: _loadHomeListings,
+                              ),
+                            ),
+                          ],
+                          _buildFeaturedSection(),
+                          _buildRecentListings(),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+    }
   }
 
   Widget _buildHeader() {
@@ -917,7 +1011,7 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.home_rounded,
               label: 'Home',
               isActive: _selectedIndex == 0,
-              onTap: () => setState(() => _selectedIndex = 0),
+              onTap: _showHomeTab,
             ),
             _NavItem(
               icon: Icons.explore_rounded,
@@ -930,7 +1024,7 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.favorite_rounded,
               label: 'Saved',
               isActive: _selectedIndex == 2,
-              onTap: () => _openAuthenticatedPage(const FavoritesPage()),
+              onTap: _openFavoritesPage,
             ),
             _NavItem(
               icon: Icons.person_rounded,
@@ -1216,13 +1310,16 @@ class _FeaturedCard extends StatelessWidget {
                   top: Radius.circular(16),
                 ),
               ),
-              child: _ListingImageThumbnail(
-                listing: listing,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(16),
+              child: Hero(
+                tag: 'listing_image_${listing.id}',
+                child: _ListingImageThumbnail(
+                  listing: listing,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
+                  ),
+                  iconSize: 44,
+                  iconColor: kNavy.withValues(alpha: 0.5),
                 ),
-                iconSize: 44,
-                iconColor: kNavy.withValues(alpha: 0.5),
               ),
             ),
             Padding(
@@ -1462,13 +1559,16 @@ class _ListingCard extends StatelessWidget {
                     top: Radius.circular(16),
                   ),
                 ),
-                child: _ListingImageThumbnail(
-                  listing: listing,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(16),
+                child: Hero(
+                  tag: 'listing_image_${listing.id}',
+                  child: _ListingImageThumbnail(
+                    listing: listing,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                    iconSize: 40,
+                    iconColor: kNavy.withValues(alpha: 0.45),
                   ),
-                  iconSize: 40,
-                  iconColor: kNavy.withValues(alpha: 0.45),
                 ),
               ),
             ),

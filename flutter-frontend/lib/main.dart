@@ -20,6 +20,18 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'LNU Student Square',
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: <TargetPlatform, PageTransitionsBuilder>{
+            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+          },
+        ),
+      ),
       home: AuthService().hasSession ? const HomePage() : const WelcomePage(),
       routes: {
         '/welcome': (context) => const WelcomePage(),
