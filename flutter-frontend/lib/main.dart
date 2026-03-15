@@ -4,6 +4,7 @@ import 'login_page.dart';
 import 'profile_page.dart';
 import 'register_page.dart';
 import 'auth_service.dart';
+import 'welcome_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,8 +20,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'LNU Student Square',
       debugShowCheckedModeBanner: false,
-      home: const HomePage(),
+      home: AuthService().hasSession ? const HomePage() : const WelcomePage(),
       routes: {
+        '/welcome': (context) => const WelcomePage(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
         '/profile': (context) => const ProfilePage(),
