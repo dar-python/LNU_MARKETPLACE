@@ -88,9 +88,9 @@ class _WelcomePageState extends State<WelcomePage>
                       child: SlideTransition(
                         position: _slideAnimation,
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: <Widget>[
-                            const Spacer(),
                             Stack(
                               alignment: Alignment.center,
                               children: <Widget>[
@@ -204,7 +204,7 @@ class _WelcomePageState extends State<WelcomePage>
                                 ),
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(height: 48),
                             Padding(
                               padding: const EdgeInsets.only(bottom: 16),
                               child: Text(
