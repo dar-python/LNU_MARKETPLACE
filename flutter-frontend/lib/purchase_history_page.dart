@@ -41,13 +41,17 @@ class _PurchaseHistoryPageState extends State<PurchaseHistoryPage> {
 
     try {
       final sentInquiries = await InquiryService().fetchSentInquiries();
-      final acceptedInquiries =
+      final successfulInquiries =
           sentInquiries
-              .where((inquiry) => inquiry.status == InquiryStatus.accepted)
+              .where(
+                (inquiry) =>
+                    inquiry.status == InquiryStatus.accepted ||
+                    inquiry.status == InquiryStatus.completed,
+              )
               .toList()
             ..sort((a, b) {
-              final aDate = a.decidedAt ?? a.createdAt;
-              final bDate = b.decidedAt ?? b.createdAt;
+              final aDate = a.completedAt ?? a.decidedAt ?? a.createdAt;
+              final bDate = b.completedAt ?? b.decidedAt ?? b.createdAt;
               return bDate.compareTo(aDate);
             });
 
@@ -56,7 +60,7 @@ class _PurchaseHistoryPageState extends State<PurchaseHistoryPage> {
       }
 
       setState(() {
-        _successfulTransactions = acceptedInquiries;
+        _successfulTransactions = successfulInquiries;
         _isLoading = false;
       });
     } catch (error) {
@@ -191,9 +195,15 @@ class _PurchaseHistoryPageState extends State<PurchaseHistoryPage> {
       itemCount: _successfulTransactions.length,
       itemBuilder: (BuildContext context, int index) {
         final inquiry = _successfulTransactions[index];
-        final transactionDate = inquiry.decidedAt ?? inquiry.createdAt;
+        final transactionDate =
+            inquiry.completedAt ?? inquiry.decidedAt ?? inquiry.createdAt;
         final sellerName = inquiry.counterpartyName(isReceived: false);
-        final dateLabel = inquiry.decidedAt != null ? 'Accepted' : 'Created';
+        final dateLabel = inquiry.completedAt != null
+            ? 'Completed'
+            : (inquiry.decidedAt != null ? 'Accepted' : 'Created');
+        final statusLabel = inquiry.status == InquiryStatus.completed
+            ? 'Completed'
+            : 'Accepted / Meetup Pending';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
@@ -292,13 +302,17 @@ class _PurchaseHistoryPageState extends State<PurchaseHistoryPage> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
+                  color: inquiry.status == InquiryStatus.completed
+                      ? const Color(0xFFE3F2FD)
+                      : const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(999),
                 ),
-                child: const Text(
-                  'Accepted / Meetup Pending',
+                child: Text(
+                  statusLabel,
                   style: TextStyle(
-                    color: Color(0xFF2E7D32),
+                    color: inquiry.status == InquiryStatus.completed
+                        ? const Color(0xFF1565C0)
+                        : const Color(0xFF2E7D32),
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),

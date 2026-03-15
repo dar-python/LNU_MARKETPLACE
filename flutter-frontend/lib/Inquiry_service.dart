@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+
 import 'inquiry_model.dart';
 import 'auth_service.dart';
 import 'core/network/api_client.dart';
@@ -97,6 +101,34 @@ class InquiryService {
     );
   }
 
+  Future<Inquiry> completeTransaction({
+    required int inquiryId,
+    required File proofImage,
+    Inquiry? fallback,
+  }) async {
+    final response = await _apiClient.dio.post(
+      '/api/v1/inquiries/$inquiryId/complete',
+      data: FormData.fromMap(<String, dynamic>{
+        'proof_image': await MultipartFile.fromFile(
+          proofImage.path,
+          filename: _safeFileName(proofImage),
+        ),
+      }),
+      options: Options(contentType: 'multipart/form-data'),
+    );
+
+    final rawInquiry = _apiClient.extractDataItemMap(response.data, 'inquiry');
+    if (rawInquiry == null) {
+      throw const FormatException('Invalid inquiry payload.');
+    }
+
+    return Inquiry.fromApi(
+      rawInquiry,
+      fallbackListing: _fallbackListingFromInquiry(fallback),
+      listingAdapter: _listingAdapter,
+    );
+  }
+
   List<Inquiry> _extractInquiryList(dynamic body) {
     final rawInquiries = _apiClient.extractDataItemList(body, 'inquiries');
     if (rawInquiries == null) {
@@ -136,10 +168,21 @@ class InquiryService {
     switch (decision) {
       case InquiryStatus.accepted:
         return 'accepted';
+      case InquiryStatus.completed:
+        throw ArgumentError('Completed is not a valid inquiry decision.');
       case InquiryStatus.declined:
         return 'declined';
       case InquiryStatus.pending:
         return 'pending';
     }
+  }
+
+  String _safeFileName(File imageFile) {
+    final segments = imageFile.uri.pathSegments;
+    if (segments.isNotEmpty && segments.last.trim().isNotEmpty) {
+      return segments.last.trim();
+    }
+
+    return 'proof-image.jpg';
   }
 }
