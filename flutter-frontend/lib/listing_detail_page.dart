@@ -8,6 +8,7 @@ import 'listing_model_page.dart';
 import 'listing_service.dart';
 import 'login_page.dart';
 import 'profile_page.dart';
+import 'report_listing_page.dart';
 import 'user_public_profile_page.dart';
 
 const kNavy = Color(0xFF0D1B6E);
@@ -224,6 +225,21 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     _showSnackBar('Inquiry sent!');
   }
 
+  Future<void> _openReportPage() async {
+    final submitted = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReportListingPage(listingId: _listing.id),
+      ),
+    );
+
+    if (!mounted || submitted != true) {
+      return;
+    }
+
+    _showSnackBar('Report submitted.');
+  }
+
   Future<void> _openLoginPage() async {
     await Navigator.push(
       context,
@@ -286,6 +302,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
   @override
   Widget build(BuildContext context) {
     final listing = _listing;
+    final currentUserId = _currentUserId();
+    final isOwner = currentUserId != null && currentUserId == listing.userId;
     final detailRows = <_DetailEntry>[
       _DetailEntry(label: 'Category', value: listing.category),
       _DetailEntry(label: 'Condition', value: listing.condition),
@@ -296,6 +314,84 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FF),
+      bottomNavigationBar: isOwner
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                color: kWhite,
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 16,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: SizedBox(
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSendingInquiry || _isListingUnavailable
+                              ? null
+                              : _openInquiryComposer,
+                          icon: _isSendingInquiry
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      kGold,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(Icons.send_rounded, size: 18),
+                          label: const Text(
+                            'Inquire',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kNavy,
+                            foregroundColor: kGold,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 56,
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: _isListingUnavailable
+                            ? null
+                            : _openReportPage,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(color: Colors.redAccent),
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Icon(Icons.outlined_flag),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
       body: RefreshIndicator(
         color: kNavy,
         onRefresh: _loadListingDetail,
@@ -634,43 +730,6 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                             isLast: index == detailRows.length - 1,
                           );
                         }),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _isSendingInquiry || _isListingUnavailable
-                            ? null
-                            : _openInquiryComposer,
-                        icon: _isSendingInquiry
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    kGold,
-                                  ),
-                                ),
-                              )
-                            : const Icon(Icons.send_rounded, size: 18),
-                        label: const Text(
-                          'Send Inquiry',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kNavy,
-                          foregroundColor: kGold,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
